@@ -1,16 +1,35 @@
 import os
 import subprocess
+import re
 
 def asegurar_dir(path: str):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def nombre_salida_por_video(video_path: str, base_dir="output/transcripciones"):
+def nombre_salida_por_video(video_path: str, base_dir="output/transcripciones", parte=None) -> str:
     """
-    Genera un nombre de archivo de salida basado en el nombre del video.
+    Genera un nombre de archivo válido en Windows a partir de un path o URL de video.
+    Si es un enlace de YouTube, se usa el ID del video.
     """
-    base = os.path.splitext(os.path.basename(video_path))[0]
-    return os.path.join(base_dir, f"{base}.txt")
+    # Extraer solo el nombre base
+    base_name = os.path.basename(video_path)
+
+    # Si parece un link de YouTube → usar ID
+    if "youtube.com" in video_path or "youtu.be" in video_path:
+        match = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", video_path)
+        if match:
+            base_name = match.group(1)  # ID de YouTube
+
+    # Limpiar caracteres inválidos para Windows
+    base_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
+
+    # Agregar extensión .txt
+    if parte:
+        file_name = f"{base_name}_parte{parte}.txt"
+    else:
+        file_name = f"{base_name}.txt"
+
+    return os.path.join(base_dir, file_name)
 
 def dividir_audio_ffmpeg(audio_path: str, partes: int = 5, log_fn=None):
     """

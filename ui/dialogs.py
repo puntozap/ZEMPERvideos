@@ -9,6 +9,15 @@ def seleccionar_video():
         ],
     )
 
+def seleccionar_audio():
+    return filedialog.askopenfilename(
+        title="Seleccionar audio",
+        filetypes=[
+            ("Audio", "*.wav;*.mp3;*.m4a;*.flac;*.ogg;*.webm;*.mp4"),
+            ("Todos", "*.*"),
+        ],
+    )
+
 def mostrar_info(msg: str):
     messagebox.showinfo("Información", msg)
 

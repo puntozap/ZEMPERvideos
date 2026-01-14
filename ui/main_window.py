@@ -1,120 +1,162 @@
+import os
 import threading
 import customtkinter as ctk
-from tkinter.scrolledtext import ScrolledText
-from ui.dialogs import seleccionar_video, mostrar_info, mostrar_error
-from core.extractor import extraer_audio
-from core.transcriber import transcribir
-from core.utils import limpiar_temp, asegurar_dir, nombre_salida_por_video, dividir_audio_ffmpeg
 
-def iniciar_app():
+
+def iniciar_app(procesar_video_fn):
     # Configuración global
-    ctk.set_appearance_mode("dark")   # "light" | "dark" | "system"
+    ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
 
+    ventana = ctk.CTk()
+    ventana.title("🎬 Transcriptor de Video")
+    ventana.geometry("700x500")
+
+    frame_main = ctk.CTkFrame(master=ventana, corner_radius=12)
+    frame_main.pack(fill="both", expand=True, padx=20, pady=20)
+
+    # --- Área de logs y progreso se crean después ---
+    txt_logs = ctk.CTkTextbox(frame_main, height=220, width=650, corner_radius=10)
+    txt_logs.pack_forget()  # lo ocultamos de momento, se organiza abajo
+    progress = ctk.CTkProgressBar(frame_main, width=650)
+
+    # --- Funciones auxiliares ---
     def log(msg):
-        txt_logs.config(state="normal")
+        txt_logs.configure(state="normal")
         txt_logs.insert("end", msg + "\n")
         txt_logs.see("end")
-        txt_logs.config(state="disabled")
+        txt_logs.configure(state="disabled")
 
-    def deshabilitar_ui(flag=True):
-        if flag:
-            btn_seleccionar.configure(state="disabled")
-        else:
-            btn_seleccionar.configure(state="normal")
+    def actualizar_progreso(valor, maximo=100):
+        progress.set(valor / maximo if maximo > 0 else 0)
 
-    def procesar_en_thread(video_path):
-        try:
-            log(f"📁 Video seleccionado: {video_path}")
-            log("🎧 Extrayendo audio...")
-            audio_path = extraer_audio(video_path)
-            log(f"✔ Audio temporal: {audio_path}")
+    def abrir_transcripciones():
+        folder = os.path.abspath("output/transcripciones")
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        os.startfile(folder)  # Windows
 
-            # 🔥 Dividir en 5 fragmentos
-            log("✂️ Dividiendo audio en 5 partes con ffmpeg...")
-            partes = dividir_audio_ffmpeg(audio_path, partes=5, log_fn=log)
-            log(f"✔ Audio dividido en {len(partes)} fragmentos")
-
-            asegurar_dir("output/transcripciones")
-
-            # 🔄 Procesar cada fragmento
-            for idx, parte in enumerate(partes, start=1):
-                log(f"🔊 Procesando audio {idx}/{len(partes)}: {parte}")
-                texto = transcribir(parte)
-
-                out_file = nombre_salida_por_video(
-                    video_path,
-                    base_dir="output/transcripciones"
-                ).replace(".txt", f"_parte{idx}.txt")
-
-                with open(out_file, "w", encoding="utf-8") as f:
-                    f.write(texto)
-
-                log(f"✅ Parte {idx}/{len(partes)} guardada en: {out_file}")
-
-            mostrar_info(f"Transcripción completada en {len(partes)} archivos separados.")
-
-        except Exception as e:
-            mostrar_error(str(e))
-            log(f"❌ Error: {e}")
-        finally:
-            try:
-                limpiar_temp("temp_audio.wav")
-            except Exception:
-                pass
-            deshabilitar_ui(False)
-
-    def on_click():
-        video = seleccionar_video()
-        if not video:
+    def eliminar_audios(log_fn=None):
+        folder = os.path.abspath("downloads")
+        if not os.path.exists(folder):
             return
-        deshabilitar_ui(True)
-        txt_logs.config(state="normal")
-        txt_logs.delete("1.0", "end")
-        txt_logs.config(state="disabled")
-        hilo = threading.Thread(target=procesar_en_thread, args=(video,), daemon=True)
-        hilo.start()
+        count = 0
+        for f in os.listdir(folder):
+            if f.lower().endswith((".wav", ".webm", ".mp4")):
+                try:
+                    os.remove(os.path.join(folder, f))
+                    count += 1
+                except Exception as e:
+                    if log_fn:
+                        log_fn(f"❌ No se pudo borrar {f}: {e}")
+        if log_fn:
+            log_fn(f"🗑 {count} audios eliminados de downloads/")
 
-    def cambiar_tema():
-        modo = ctk.get_appearance_mode()
-        if modo == "Dark":
-            ctk.set_appearance_mode("light")
-        else:
-            ctk.set_appearance_mode("dark")
+    # --- Botón para seleccionar video local ---
+    def on_click_local():
+        from ui.dialogs import seleccionar_video
+        video = seleccionar_video()
+        if video:
+            threading.Thread(
+                target=procesar_video_fn,
+                args=(video, False, False),
+                daemon=True
+            ).start()
 
-    # Ventana principal
-    ventana = ctk.CTk()
-    ventana.title("🎬 Transcriptor de Video a Texto")
-    ventana.geometry("650x450")
-
-    frame = ctk.CTkFrame(master=ventana, corner_radius=15)
-    frame.pack(pady=20, padx=20, fill="both", expand=True)
-
-    lbl = ctk.CTkLabel(
-        master=frame,
-        text="Selecciona un video para transcribir a texto",
-        font=("Segoe UI", 16, "bold")
+    btn_local = ctk.CTkButton(
+        frame_main,
+        text="🎥 Seleccionar Video Local",
+        command=on_click_local,
+        height=50,
+        width=640,
+        font=ctk.CTkFont(size=16, weight="bold")
     )
-    lbl.pack(pady=10)
+    btn_local.pack(pady=15)
 
-    btn_seleccionar = ctk.CTkButton(
-        master=frame,
-        text="📂 Seleccionar Video",
-        command=on_click,
+    # --- Boton para seleccionar audio local ---
+    def on_click_audio():
+        from ui.dialogs import seleccionar_audio
+        audio = seleccionar_audio()
+        if audio:
+            threading.Thread(
+                target=procesar_video_fn,
+                args=(audio, False, True),
+                daemon=True
+            ).start()
+
+    btn_audio = ctk.CTkButton(
+        frame_main,
+        text="Seleccionar Audio Local",
+        command=on_click_audio,
+        height=45,
+        width=640,
+        font=ctk.CTkFont(size=14, weight="bold")
+    )
+    btn_audio.pack(pady=5)
+
+    # --- Label + input + botón YouTube ---
+    lbl_youtube = ctk.CTkLabel(
+        frame_main,
+        text="Subir link de video de YouTube:",
+        font=ctk.CTkFont(size=14)
+    )
+    lbl_youtube.pack(pady=(10, 5))
+
+    frame_youtube = ctk.CTkFrame(frame_main, fg_color="transparent")
+    frame_youtube.pack(pady=5)
+
+    entrada_url = ctk.CTkEntry(
+        frame_youtube,
+        placeholder_text="Pega el enlace aquí",
+        width=400
+    )
+    entrada_url.pack(side="left", padx=10)
+
+    def on_click_youtube():
+        url = entrada_url.get().strip()
+        if url:
+            threading.Thread(
+                target=procesar_video_fn,
+                args=(url, True, False),
+                daemon=True
+            ).start()
+
+    btn_youtube = ctk.CTkButton(
+        frame_youtube,
+        text="📥 Descargar Audio",
+        command=on_click_youtube,
         height=40,
-        width=220,
-        font=("Segoe UI", 14, "bold"),
-        fg_color="#4CAF50",
-        hover_color="#45a049"
+        width=180
     )
-    btn_seleccionar.pack(pady=10)
+    btn_youtube.pack(side="left", padx=10)
 
-    # Área de logs con ScrolledText (seguimos usando Tk, se integra bien con CTk)
-    txt_logs = ScrolledText(frame, wrap="word", height=14, state="disabled", font=("Consolas", 10))
-    txt_logs.pack(fill="both", expand=True, padx=10, pady=10)
+    # --- Botones adicionales ---
+    btn_abrir = ctk.CTkButton(
+        frame_main,
+        text="📂 Abrir Transcripciones",
+        command=abrir_transcripciones,
+        height=40,
+        width=300
+    )
+    btn_abrir.pack(pady=5)
 
-    # Switch modo claro/oscuro
-    switch = ctk.CTkSwitch(master=frame, text="🌙/☀️ Modo oscuro", command=cambiar_tema)
-    switch.pack(pady=5)
+    btn_eliminar = ctk.CTkButton(
+        frame_main,
+        text="🗑 Eliminar Audios",
+        command=lambda: eliminar_audios(log),
+        fg_color="red",
+        hover_color="#b22222",
+        height=40,
+        width=300
+    )
+    btn_eliminar.pack(pady=5)
 
-    ventana.mainloop()
+    # --- Barra de progreso ---
+    progress.pack(pady=15)
+    progress.set(0)
+
+    # --- Área de logs ---
+    txt_logs.pack(pady=10, padx=10)
+    txt_logs.configure(state="disabled")
+
+    return ventana, progress, log, entrada_url
