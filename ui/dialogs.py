@@ -18,6 +18,21 @@ def seleccionar_audio():
         ],
     )
 
+def seleccionar_imagen():
+    return filedialog.askopenfilename(
+        title="Seleccionar imagen de fondo",
+        filetypes=[
+            ("Imagenes", "*.png;*.jpg;*.jpeg;*.webp"),
+            ("Todos", "*.*"),
+        ],
+    )
+
+def seleccionar_archivo(title: str, filetypes):
+    return filedialog.askopenfilename(
+        title=title,
+        filetypes=filetypes,
+    )
+
 def mostrar_info(msg: str):
     messagebox.showinfo("Información", msg)
 

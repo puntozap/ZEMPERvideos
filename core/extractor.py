@@ -1,24 +1,26 @@
 import os
 import tempfile
-import moviepy as mp
+import subprocess
 
 def extraer_audio(video_path: str, audio_path: str | None = None) -> str:
     """
-    Extrae el audio de un video usando moviepy (FFmpeg por debajo).
-    Devuelve la ruta del archivo WAV generado.
+    Extrae el audio de un video usando ffmpeg.
+    Devuelve la ruta del archivo MP3 generado.
     """
     # Archivo temporal por defecto
     if audio_path is None:
         tmpdir = tempfile.gettempdir()
-        audio_path = os.path.join(tmpdir, "temp_audio.wav")
+        audio_path = os.path.join(tmpdir, "temp_audio.mp3")
 
-    # Procesar
-    clip = mp.VideoFileClip(video_path)
-    if clip.audio is None:
-        raise ValueError("El video no contiene pista de audio.")
-    # 16-bit PCM WAV por compatibilidad con Whisper
-    clip.audio.write_audiofile(audio_path, codec="pcm_s16le", fps=16000, logger=None)
-    clip.close()
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-vn",
+        "-acodec", "libmp3lame",
+        "-b:a", "192k",
+        audio_path
+    ]
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if not os.path.exists(audio_path):
         raise RuntimeError("No se pudo generar el archivo de audio.")
