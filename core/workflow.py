@@ -187,6 +187,15 @@ def procesar_corte_individual(
     posicion: str = "C",
     zoom: float = 1.0,
     bg_color: str = "black",
+    motion: bool = False,
+    motion_amount: float = 0.08,
+    motion_period: float = 30.0,
+    outro_enabled: bool = False,
+    outro_image: str | None = None,
+    outro_text: str = "",
+    outro_seconds: float = 3.0,
+    outro_font_size: int = 54,
+    outro_color: str = "#FFFFFF",
     barra=None,
     logs=None,
 ):
@@ -212,6 +221,15 @@ def procesar_corte_individual(
             posicion=posicion,
             zoom=zoom,
             bg_color=bg_color,
+            motion=motion,
+            motion_amount=motion_amount,
+            motion_period=motion_period,
+            outro_enabled=outro_enabled,
+            outro_image=outro_image,
+            outro_text=outro_text,
+            outro_seconds=outro_seconds,
+            outro_font_size=outro_font_size,
+            outro_color=outro_color,
             start_sec=start_sec,
             end_sec=end_sec,
             log_fn=logs if logs else None,
@@ -275,6 +293,7 @@ def procesar_quemar_srt(
     force_position: bool = True,
     max_chars: int = 32,
     max_lines: int = 2,
+    use_ass: bool = True,
     logs=None,
 ):
     """
@@ -311,6 +330,7 @@ def procesar_quemar_srt(
             force_position=force_position,
             max_chars=max_chars,
             max_lines=max_lines,
+            use_ass=use_ass,
             log_fn=logs
         )
         if logs: logs(f"Video subtitulado listo: {out_path}")

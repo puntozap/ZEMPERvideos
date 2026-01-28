@@ -72,6 +72,93 @@ def obtener_tamano_video(path: str) -> tuple[int, int]:
         return (1920, 1080)
     return (int(parts[0]), int(parts[1]))
 
+def obtener_fps(path: str) -> float:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=r_frame_rate",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    val = result.stdout.strip()
+    if not val:
+        return 30.0
+    if "/" in val:
+        num, den = val.split("/", 1)
+        try:
+            num_f = float(num)
+            den_f = float(den)
+            if den_f > 0:
+                return num_f / den_f
+        except Exception:
+            return 30.0
+    try:
+        return float(val)
+    except Exception:
+        return 30.0
+
+def tiene_audio(path: str) -> bool:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_type",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.stdout.strip() == "audio"
+
+def crear_outro_tiktok(
+    image_path: str,
+    output_path: str,
+    duration: float = 3.0,
+    text: str = "",
+    font_size: int = 54,
+    color: str = "#FFFFFF",
+    log_fn=None
+):
+    """
+    Crea un clip vertical 1080x1920 a partir de una imagen, con texto centrado.
+    """
+    duration = max(1.0, float(duration))
+    color = (color or "#FFFFFF").strip()
+    if not color.startswith("#"):
+        color = "#" + color
+    safe_text = (text or "").replace(":", "\\:").replace("'", "\\'")
+    draw = ""
+    if safe_text:
+        draw = (
+            f",drawtext=text='{safe_text}':"
+            f"fontcolor={color}:fontsize={font_size}:"
+            "x=(w-text_w)/2:y=(h-text_h)/2"
+        )
+    filtro = (
+        "scale=1080:1920:force_original_aspect_ratio=increase,"
+        "crop=1080:1920"
+        f"{draw}"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", image_path,
+        "-f", "lavfi", "-t", str(duration), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-t", str(duration),
+        "-vf", filtro,
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-shortest",
+        "-movflags", "+faststart",
+        output_path
+    ]
+    if log_fn:
+        log_fn(f"🖼️ Creando tarjeta final: {os.path.basename(output_path)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        if log_fn:
+            err = (result.stderr or "").strip()
+            log_fn(f"❌ Tarjeta final falló: {err[-300:]}")
+        raise RuntimeError("No se pudo crear la tarjeta final.")
+
 def dividir_video_ffmpeg(
     video_path: str,
     segundos_por_parte: float,
@@ -136,6 +223,15 @@ def dividir_video_vertical_individual(
     posicion: str = "C",
     zoom: float = 1.0,
     bg_color: str = "black",
+    motion: bool = False,
+    motion_amount: float = 0.08,
+    motion_period: float = 30.0,
+    outro_enabled: bool = False,
+    outro_image: str | None = None,
+    outro_text: str = "",
+    outro_seconds: float = 3.0,
+    outro_font_size: int = 54,
+    outro_color: str = "#FFFFFF",
     total_partes: int | None = None,
     start_sec: float = 0.0,
     end_sec: float | None = None,
@@ -195,6 +291,27 @@ def dividir_video_vertical_individual(
         f"y='if(gte(ih,{target_h}),(ih-{target_h})/2,0)',"
         f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color={color}"
     )
+    if motion:
+        try:
+            motion_amount = float(motion_amount)
+        except Exception:
+            motion_amount = 0.08
+        try:
+            motion_period = float(motion_period)
+        except Exception:
+            motion_period = 30.0
+        motion_amount = max(0.0, min(motion_amount, 0.35))
+        motion_period = max(2.0, motion_period)
+        fps = obtener_fps(video_path)
+        if fps <= 0:
+            fps = 30.0
+        period_frames = max(1, int(fps * motion_period))
+        zoom_expr = f"1+{motion_amount}*(1-cos(2*PI*on/{period_frames}))/2"
+        filtro += (
+            f",zoompan=z='{zoom_expr}':"
+            "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+            f"d=1:s={target_w}x{target_h}:fps={int(round(fps))}"
+        )
 
     paths = []
     for i in range(total_partes):
@@ -207,6 +324,10 @@ def dividir_video_vertical_individual(
         if log_fn:
             log_fn(f"Generando vertical parte {i+1}/{total_partes}...")
 
+        temp_path = out_path
+        if outro_enabled and outro_image and os.path.exists(outro_image):
+            temp_path = os.path.join(out_dir, f"{base_name}_parte_{i+1:03d}_tmp.mp4")
+
         cmd = [
             "ffmpeg", "-y",
             "-i", video_path,
@@ -216,7 +337,7 @@ def dividir_video_vertical_individual(
             "-c:v", "libx264",
             "-c:a", "aac",
             "-movflags", "+faststart",
-            out_path
+            temp_path
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
@@ -230,15 +351,134 @@ def dividir_video_vertical_individual(
                 pass
             continue
 
-        if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+        if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
             if log_fn:
                 log_fn(f"Error: salida vacia en parte {i+1}")
             try:
-                if os.path.exists(out_path):
-                    os.remove(out_path)
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
             except Exception:
                 pass
             continue
+
+        if outro_enabled and outro_image and os.path.exists(outro_image):
+            try:
+                if log_fn:
+                    log_fn(f"🧾 Outro: img={outro_image}, dur={outro_seconds}s, text='{outro_text[:40]}'")
+                has_audio = tiene_audio(temp_path)
+                if log_fn:
+                    log_fn(f"🔊 Audio en clip: {'si' if has_audio else 'no'}")
+                    log_fn("🖼️ Preparando imagen final...")
+                safe_text = (outro_text or "").replace(":", "\\:").replace("'", "\\'")
+                draw = ""
+                if safe_text:
+                    if log_fn:
+                        log_fn("✍️ Aplicando texto centrado...")
+                    draw = (
+                        f",drawtext=text='{safe_text}':"
+                        f"fontcolor={outro_color}:fontsize={outro_font_size}:"
+                        "x=(w-text_w)/2:y=(h-text_h)/2"
+                    )
+                if log_fn:
+                    log_fn("🎬 Generando video final con tarjeta...")
+                outro_filter = (
+                    "scale=1080:1920:force_original_aspect_ratio=increase,"
+                    "crop=1080:1920"
+                    f"{draw}"
+                )
+                total_dur = float(duracion_parte) + float(outro_seconds)
+                vf = (
+                    f"[1:v]{outro_filter}[outro];"
+                    f"[0:v]tpad=stop_mode=clone:stop_duration={outro_seconds}[v0];"
+                    f"[v0][outro]overlay=enable='gte(t,{duracion_parte:.3f})'[v]"
+                )
+                cmd_outro = [
+                    "ffmpeg", "-y",
+                    "-i", temp_path,
+                    "-loop", "1", "-i", outro_image,
+                    "-filter_complex", vf,
+                    "-map", "[v]",
+                    "-c:v", "libx264",
+                    "-movflags", "+faststart",
+                    "-t", f"{total_dur:.3f}",
+                    out_path
+                ]
+                video_res = subprocess.run(cmd_outro, capture_output=True, text=True)
+                if video_res.returncode != 0:
+                    if log_fn:
+                        err = (video_res.stderr or "").strip()
+                        log_fn(f"❌ Error creando outro: {err[-300:]}")
+                    raise RuntimeError("No se pudo crear la tarjeta final.")
+                if log_fn:
+                    log_fn("✅ Video final generado.")
+
+                if has_audio:
+                    if log_fn:
+                        log_fn("🎵 Separando audio original...")
+                    audio_path = os.path.join(out_dir, f"{base_name}_parte_{i+1:03d}_audio.aac")
+                    extra_cmd = [
+                        "ffmpeg", "-y",
+                        "-i", temp_path,
+                        "-vn", "-acodec", "aac",
+                        audio_path
+                    ]
+                    extra_res = subprocess.run(extra_cmd, capture_output=True, text=True)
+                    if extra_res.returncode != 0:
+                        if log_fn:
+                            err = (extra_res.stderr or "").strip()
+                            log_fn(f"❌ Error extrayendo audio: {err[-300:]}")
+                        raise RuntimeError("No se pudo extraer audio.")
+
+                    if log_fn:
+                        log_fn("🔗 Uniendo audio con el video final...")
+                    mux_cmd = [
+                        "ffmpeg", "-y",
+                        "-i", out_path,
+                        "-i", audio_path,
+                        "-map", "0:v:0",
+                        "-map", "1:a:0",
+                        "-c:v", "copy",
+                        "-c:a", "aac",
+                        "-af", f"apad=pad_dur={outro_seconds}",
+                        "-t", f"{total_dur:.3f}",
+                        out_path + ".tmp.mp4"
+                    ]
+                    mux_res = subprocess.run(mux_cmd, capture_output=True, text=True)
+                    if mux_res.returncode != 0:
+                        if log_fn:
+                            err = (mux_res.stderr or "").strip()
+                            log_fn(f"❌ Error reinsertando audio: {err[-300:]}")
+                        raise RuntimeError("No se pudo reinsertar audio.")
+                    try:
+                        if os.path.exists(out_path + ".tmp.mp4"):
+                            os.replace(out_path + ".tmp.mp4", out_path)
+                    except Exception:
+                        pass
+                    try:
+                        if os.path.exists(audio_path):
+                            os.remove(audio_path)
+                    except Exception:
+                        pass
+                try:
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                except Exception:
+                    pass
+            except Exception:
+                # si falla el outro, dejar el clip original
+                try:
+                    if os.path.exists(temp_path) and temp_path != out_path:
+                        os.replace(temp_path, out_path)
+                except Exception:
+                    pass
+        elif outro_enabled:
+            if log_fn:
+                log_fn("⚠️ Outro activado pero sin imagen valida.")
+        elif temp_path != out_path:
+            try:
+                os.replace(temp_path, out_path)
+            except Exception:
+                pass
 
         paths.append(out_path)
         if log_fn:
@@ -535,6 +775,7 @@ def quemar_srt_en_video(
     force_position: bool = True,
     max_chars: int = 32,
     max_lines: int = 2,
+    use_ass: bool = True,
     log_fn=None
 ) -> str:
     """
@@ -592,13 +833,14 @@ def quemar_srt_en_video(
     line_height = font_size * 1.25
     subtitle_height = line_height * max_lines
 
+    center_offset = int(h * (0.00 if is_vertical else 0.00))
     def _y_top_for_pos():
         if _pos == "top":
             return safe_area
         if _pos == "top-center":
             return (safe_area + (h - subtitle_height) / 2) / 2
         if _pos == "center":
-            return (h - subtitle_height) / 2
+            return (h - subtitle_height) / 2 + center_offset
         # bottom / bottom-center
         bottom_y = h - safe_area - subtitle_height
         if _pos == "bottom-center":
@@ -606,16 +848,18 @@ def quemar_srt_en_video(
             return (center_y + bottom_y) / 2
         return bottom_y
 
+    y_top = _y_top_for_pos()
+    margin_v_top = max(0, int(y_top))
+    margin_v_bottom = max(0, int(h - y_top - subtitle_height))
     if _pos in ("top", "top-center"):
         alignment = 8
-        margin_v = max(0, int(_y_top_for_pos()))
+        margin_v = margin_v_top
     elif _pos == "center":
         alignment = 5
         margin_v = 0
     else:
         alignment = 2
-        y_top = _y_top_for_pos()
-        margin_v = max(0, int(h - y_top - subtitle_height))
+        margin_v = margin_v_bottom
 
     try:
         font_size = int(font_size)
@@ -631,87 +875,105 @@ def quemar_srt_en_video(
     except Exception:
         shadow = 1
 
-    # Preparar ASS temporal con estilo fijo (más confiable que force_style)
+    # Preparar estilo
     if log_fn:
         log_fn(f"Estilo SRT: font={font_size}, outline={outline}, shadow={shadow}, pos={posicion}, marginV={margin_v}, vertical={is_vertical}")
-    try:
-        tmp_ass = os.path.join(tempfile.gettempdir(), f"srt_style_{os.getpid()}.ass")
-        conv_cmd = [
-            "ffmpeg", "-y",
-            "-i", srt_use_path,
-            tmp_ass
-        ]
-        conv_res = subprocess.run(conv_cmd, capture_output=True, text=True)
-        if log_fn and conv_res.returncode != 0:
-            log_fn(f"ASS convert error: {(conv_res.stderr or '')[-300:]}")
-        ass_lines = []
-        if not os.path.exists(tmp_ass):
-            raise RuntimeError("No se genero el ASS temporal.")
-        with open(tmp_ass, "r", encoding="utf-8", errors="ignore") as f:
-            ass_lines = f.read().splitlines()
-        new_lines = []
-        in_styles = False
-        # Pre-calc position for \pos override
-        y_top = _y_top_for_pos()
-        if alignment == 8:  # top
-            y_anchor = y_top
-        elif alignment == 5:  # center
-            y_anchor = y_top + (subtitle_height / 2)
-        else:  # bottom
-            y_anchor = y_top + subtitle_height
-        x_anchor = w / 2
+    # Pre-calc position for \pos override (ASS)
+    if alignment == 8:  # top
+        y_anchor = y_top
+    elif alignment == 5:  # center
+        y_anchor = y_top + (subtitle_height / 2)
+    else:  # bottom
+        y_anchor = y_top + subtitle_height
+    x_anchor = w / 2
 
-        for line in ass_lines:
-            if line.strip().lower().startswith("[v4+ styles]"):
-                in_styles = True
+    if use_ass:
+        try:
+            tmp_ass = os.path.join(tempfile.gettempdir(), f"srt_style_{os.getpid()}.ass")
+            conv_cmd = [
+                "ffmpeg", "-y",
+                "-i", srt_use_path,
+                tmp_ass
+            ]
+            conv_res = subprocess.run(conv_cmd, capture_output=True, text=True)
+            if log_fn and conv_res.returncode != 0:
+                log_fn(f"ASS convert error: {(conv_res.stderr or '')[-300:]}")
+            ass_lines = []
+            if not os.path.exists(tmp_ass):
+                raise RuntimeError("No se genero el ASS temporal.")
+            with open(tmp_ass, "r", encoding="utf-8", errors="ignore") as f:
+                ass_lines = f.read().splitlines()
+            new_lines = []
+            in_styles = False
+            in_script = False
+            for line in ass_lines:
+                low = line.strip().lower()
+                if low.startswith("[script info]"):
+                    in_script = True
+                    new_lines.append(line)
+                    continue
+                if in_script and low.startswith("[v4+ styles]"):
+                    in_script = False
+                    in_styles = True
+                    new_lines.append(line)
+                    continue
+                if in_script and low.startswith("playresx:"):
+                    new_lines.append(f"PlayResX: {w}")
+                    continue
+                if in_script and low.startswith("playresy:"):
+                    new_lines.append(f"PlayResY: {h}")
+                    continue
+                if line.strip().lower().startswith("[v4+ styles]"):
+                    in_styles = True
+                    new_lines.append(line)
+                    continue
+                if in_styles and line.strip().lower().startswith("format:"):
+                    new_lines.append(line)
+                    continue
+                if in_styles and line.strip().lower().startswith("style:"):
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        fmt = parts[0] + ":"
+                        vals = parts[1].split(",")
+                        if len(vals) >= 23:
+                            vals[1] = "Arial"
+                            vals[2] = str(font_size)
+                            vals[3] = "&H00FFFFFF"
+                            vals[4] = "&H00000000"
+                            vals[5] = "&H00000000"
+                            vals[15] = "1"
+                            vals[16] = str(outline)
+                            vals[17] = str(shadow)
+                            vals[18] = str(alignment)
+                            vals[19] = "20"
+                            vals[20] = "20"
+                            vals[21] = str(margin_v)
+                            line = fmt + ",".join(vals)
+                    new_lines.append(line)
+                    in_styles = False
+                    continue
+                if line.strip().lower().startswith("dialogue:"):
+                    parts = line.split(",", 9)
+                    if len(parts) == 10:
+                        text = parts[9]
+                        text = re.sub(r"\{\\pos\([^)]+\)\}", "", text)
+                        text = re.sub(r"\{\\move\([^)]+\)\}", "", text)
+                        text = re.sub(r"\{\\org\([^)]+\)\}", "", text)
+                        text = re.sub(r"\{\\an\d+\}", "", text)
+                        text = re.sub(r"\{\\a\d+\}", "", text)
+                        pos_tag = f"{{\\pos({int(x_anchor)},{int(y_anchor)})}}"
+                        parts[9] = pos_tag + text
+                        line = ",".join(parts)
                 new_lines.append(line)
-                continue
-            if in_styles and line.strip().lower().startswith("format:"):
-                new_lines.append(line)
-                continue
-            if in_styles and line.strip().lower().startswith("style:"):
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    fmt = parts[0] + ":"
-                    vals = parts[1].split(",")
-                    if len(vals) >= 23:
-                        vals[1] = "Arial"
-                        vals[2] = str(font_size)
-                        vals[3] = "&H00FFFFFF"
-                        vals[4] = "&H00000000"
-                        vals[5] = "&H00000000"
-                        vals[15] = "1"
-                        vals[16] = str(outline)
-                        vals[17] = str(shadow)
-                        vals[18] = str(alignment)
-                        vals[19] = "20"
-                        vals[20] = "20"
-                        vals[21] = str(margin_v)
-                        line = fmt + ",".join(vals)
-                new_lines.append(line)
-                in_styles = False
-                continue
-            if line.strip().lower().startswith("dialogue:"):
-                parts = line.split(",", 9)
-                if len(parts) == 10:
-                    text = parts[9]
-                    text = re.sub(r"\{\\pos\([^)]+\)\}", "", text)
-                    text = re.sub(r"\{\\move\([^)]+\)\}", "", text)
-                    text = re.sub(r"\{\\org\([^)]+\)\}", "", text)
-                    text = re.sub(r"\{\\an\d+\}", "", text)
-                    text = re.sub(r"\{\\a\d+\}", "", text)
-                    pos_tag = f"{{\\pos({int(x_anchor)},{int(y_anchor)})}}"
-                    parts[9] = pos_tag + text
-                    line = ",".join(parts)
-            new_lines.append(line)
-        with open(tmp_ass, "w", encoding="utf-8") as f:
-            f.write("\n".join(new_lines))
-        srt_use_path = tmp_ass
-        if log_fn:
-            log_fn(f"ASS usado: {srt_use_path}")
-    except Exception as e:
-        if log_fn:
-            log_fn(f"No se pudo preparar ASS: {e}")
+            with open(tmp_ass, "w", encoding="utf-8") as f:
+                f.write("\n".join(new_lines))
+            srt_use_path = tmp_ass
+            if log_fn:
+                log_fn(f"ASS usado: {srt_use_path}")
+        except Exception as e:
+            if log_fn:
+                log_fn(f"No se pudo preparar ASS: {e}")
+
     # ffmpeg subtitles filter needs escaped path on Windows
     srt_filter_path = srt_use_path
     if os.name == "nt":
@@ -719,8 +981,26 @@ def quemar_srt_en_video(
         srt_filter_path = srt_filter_path.replace(":", "\\:")
         srt_filter_path = srt_filter_path.replace(",", "\\,")
         srt_filter_path = srt_filter_path.replace("'", "\\'")
-    vf = f"ass='{srt_filter_path}'"
+    if use_ass:
+        vf = f"ass='{srt_filter_path}'"
+    else:
+        style_alignment = alignment
+        style_margin_v = margin_v
+        if _pos == "center":
+            # Con subtitles/force_style el center ignora marginV, por eso usamos bottom-center
+            style_alignment = 2
+            style_margin_v = margin_v_bottom
+        style = (
+            f"Alignment={style_alignment},MarginV={style_margin_v},MarginL=20,MarginR=20,"
+            f"Fontsize={font_size},Outline={outline},Shadow={shadow},"
+            "BorderStyle=1,"
+            "PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&"
+        )
+        style_escaped = style.replace(":", "\\:").replace(",", "\\,").replace("'", "\\'")
+        vf = f"subtitles='{srt_filter_path}':charenc=UTF-8:force_style='{style_escaped}'"
 
+    if log_fn:
+        log_fn(f"ffmpeg filter: {vf}")
     cmd = [
         "ffmpeg", "-y",
         "-i", video_path,

@@ -8,6 +8,7 @@ from PIL import Image, ImageTk, ImageDraw
 from moviepy import VideoFileClip
 from core.extractor import extraer_audio
 from core.workflow import procesar_corte_individual, procesar_srt, procesar_quemar_srt
+from core.ai_tiktok import generar_descripcion_tiktok
 from core.youtube_downloader import descargar_audio_youtube, descargar_video_youtube_mp4
 from core.utils import obtener_duracion_segundos, nombre_base_fuente
 
@@ -139,6 +140,7 @@ def iniciar_app(procesar_video_fn):
     ventana.title("Transcriptor de Video")
     ventana.geometry("980x680")
     ventana.minsize(820, 600)
+    ventana.state("zoomed")
 
     root = ctk.CTkFrame(master=ventana, corner_radius=14)
     root.pack(fill="both", expand=True, padx=24, pady=24)
@@ -383,6 +385,7 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Corte individual")
     tabs.add("SRT")
     tabs.add("Subtitular video")
+    tabs.add("IA TikTok")
     tabs.add("Audio MP3")
     tabs.add("YouTube MP3")
     tabs.add("YouTube MP4")
@@ -809,8 +812,120 @@ def iniciar_app(procesar_video_fn):
     )
     btn_clear_color.grid(row=0, column=3, sticky="e", padx=(8, 0))
 
+    motion_var = ctk.BooleanVar(value=False)
+    chk_motion = ctk.CTkCheckBox(
+        ind_card,
+        text="Zoom in/out cada 30s",
+        variable=motion_var
+    )
+    chk_motion.grid(row=11, column=0, sticky="w", padx=16, pady=(0, 8))
+
+    motion_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    motion_row.grid(row=12, column=0, sticky="ew", padx=16, pady=(0, 12))
+    motion_row.grid_columnconfigure(1, weight=1)
+
+    lbl_motion = ctk.CTkLabel(motion_row, text="Intensidad zoom", font=ctk.CTkFont(size=12))
+    lbl_motion.grid(row=0, column=0, sticky="w")
+
+    entry_motion = ctk.CTkEntry(motion_row, width=80)
+    entry_motion.insert(0, "0.08")
+    entry_motion.grid(row=0, column=1, sticky="w", padx=(6, 0))
+
+    btn_clear_motion = ctk.CTkButton(
+        motion_row,
+        text="Limpiar",
+        width=80,
+        height=28,
+        command=lambda: limpiar_entry(entry_motion)
+    )
+    btn_clear_motion.grid(row=0, column=2, sticky="e", padx=(8, 0))
+
+    motion_period_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    motion_period_row.grid(row=13, column=0, sticky="ew", padx=16, pady=(0, 12))
+    motion_period_row.grid_columnconfigure(1, weight=1)
+
+    lbl_motion_period = ctk.CTkLabel(motion_period_row, text="Ciclo (seg)", font=ctk.CTkFont(size=12))
+    lbl_motion_period.grid(row=0, column=0, sticky="w")
+
+    entry_motion_period = ctk.CTkEntry(motion_period_row, width=80)
+    entry_motion_period.insert(0, "30")
+    entry_motion_period.grid(row=0, column=1, sticky="w", padx=(6, 0))
+
+    outro_var = ctk.BooleanVar(value=False)
+    chk_outro = ctk.CTkCheckBox(
+        ind_card,
+        text="Agregar tarjeta final (imagen + texto)",
+        variable=outro_var
+    )
+    chk_outro.grid(row=14, column=0, sticky="w", padx=16, pady=(0, 8))
+
+    outro_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    outro_row.grid(row=15, column=0, sticky="ew", padx=16, pady=(0, 12))
+    outro_row.grid_columnconfigure(1, weight=1)
+
+    outro_state = {"image": None}
+
+    def on_click_outro_image():
+        from ui.dialogs import seleccionar_imagen
+        img = seleccionar_imagen()
+        if img:
+            outro_state["image"] = img
+            lbl_outro_img.configure(text=os.path.basename(img))
+            log(f"Imagen outro: {img}")
+
+    btn_outro_img = ctk.CTkButton(
+        outro_row,
+        text="Seleccionar imagen",
+        command=on_click_outro_image,
+        height=28,
+        width=150
+    )
+    btn_outro_img.grid(row=0, column=0, sticky="w")
+
+    lbl_outro_img = ctk.CTkLabel(outro_row, text="(sin imagen)", font=ctk.CTkFont(size=12))
+    lbl_outro_img.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    outro_text_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    outro_text_row.grid(row=16, column=0, sticky="ew", padx=16, pady=(0, 12))
+    outro_text_row.grid_columnconfigure(1, weight=1)
+
+    lbl_outro_text = ctk.CTkLabel(outro_text_row, text="Texto final", font=ctk.CTkFont(size=12))
+    lbl_outro_text.grid(row=0, column=0, sticky="w")
+
+    entry_outro_text = ctk.CTkEntry(outro_text_row)
+    entry_outro_text.grid(row=0, column=1, sticky="ew", padx=(8, 0))
+
+    outro_conf_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    outro_conf_row.grid(row=17, column=0, sticky="ew", padx=16, pady=(0, 12))
+    outro_conf_row.grid_columnconfigure(1, weight=1)
+
+    lbl_outro_secs = ctk.CTkLabel(outro_conf_row, text="Duracion (seg)", font=ctk.CTkFont(size=12))
+    lbl_outro_secs.grid(row=0, column=0, sticky="w")
+
+    entry_outro_secs = ctk.CTkEntry(outro_conf_row, width=80)
+    entry_outro_secs.insert(0, "3")
+    entry_outro_secs.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    lbl_outro_font = ctk.CTkLabel(outro_conf_row, text="Tamano texto", font=ctk.CTkFont(size=12))
+    lbl_outro_font.grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+    entry_outro_font = ctk.CTkEntry(outro_conf_row, width=80)
+    entry_outro_font.insert(0, "54")
+    entry_outro_font.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0))
+
+    outro_color_row = ctk.CTkFrame(ind_card, fg_color="transparent")
+    outro_color_row.grid(row=18, column=0, sticky="ew", padx=16, pady=(0, 12))
+    outro_color_row.grid_columnconfigure(1, weight=1)
+
+    lbl_outro_color = ctk.CTkLabel(outro_color_row, text="Color texto (hex)", font=ctk.CTkFont(size=12))
+    lbl_outro_color.grid(row=0, column=0, sticky="w")
+
+    entry_outro_color = ctk.CTkEntry(outro_color_row, width=120)
+    entry_outro_color.insert(0, "#FFFFFF")
+    entry_outro_color.grid(row=0, column=1, sticky="w", padx=(6, 0))
+
     range_ind_card = ctk.CTkFrame(ind_card, fg_color="transparent")
-    range_ind_card.grid(row=11, column=0, sticky="ew", padx=16, pady=(0, 14))
+    range_ind_card.grid(row=19, column=0, sticky="ew", padx=16, pady=(0, 14))
     range_ind_card.grid_columnconfigure(1, weight=1)
 
     lbl_inicio_ind = ctk.CTkLabel(range_ind_card, text="Inicio", font=ctk.CTkFont(size=12))
@@ -861,6 +976,27 @@ def iniciar_app(procesar_video_fn):
         except Exception:
             zoom = slider_zoom.get()
         color = entry_color.get().strip() or "#000000"
+        motion = motion_var.get()
+        try:
+            motion_amount = float(entry_motion.get().strip().replace(",", "."))
+        except Exception:
+            motion_amount = 0.08
+        try:
+            motion_period = float(entry_motion_period.get().strip().replace(",", "."))
+        except Exception:
+            motion_period = 30.0
+        outro_enabled = outro_var.get()
+        outro_image = outro_state.get("image")
+        outro_text = entry_outro_text.get().strip()
+        try:
+            outro_seconds = float(entry_outro_secs.get().strip().replace(",", "."))
+        except Exception:
+            outro_seconds = 3.0
+        try:
+            outro_font = int(entry_outro_font.get().strip())
+        except Exception:
+            outro_font = 54
+        outro_color = entry_outro_color.get().strip() or "#FFFFFF"
 
         def run_individual():
             try:
@@ -872,6 +1008,15 @@ def iniciar_app(procesar_video_fn):
                     posicion,
                     zoom,
                     color,
+                    motion,
+                    motion_amount,
+                    motion_period,
+                    outro_enabled,
+                    outro_image,
+                    outro_text,
+                    outro_seconds,
+                    outro_font,
+                    outro_color,
                     None,
                     log
                 )
@@ -888,7 +1033,7 @@ def iniciar_app(procesar_video_fn):
         command=iniciar_corte_individual,
         height=46
     )
-    btn_ind_run.grid(row=12, column=0, sticky="ew", padx=16, pady=(0, 8))
+    btn_ind_run.grid(row=20, column=0, sticky="ew", padx=16, pady=(0, 8))
 
     btn_ind_open = ctk.CTkButton(
         ind_card,
@@ -896,7 +1041,7 @@ def iniciar_app(procesar_video_fn):
         command=abrir_videos,
         height=40
     )
-    btn_ind_open.grid(row=13, column=0, sticky="ew", padx=16, pady=(0, 16))
+    btn_ind_open.grid(row=21, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- SRT ---
     tab_srt = tabs.tab("SRT")
@@ -1194,6 +1339,7 @@ def iniciar_app(procesar_video_fn):
 
     def _preview_block(inner_h, is_vertical, font_size, max_lines, pos):
         safe_area = int(inner_h * (0.22 if is_vertical else 0.10))
+        center_offset = int(inner_h * (0.00 if is_vertical else 0.00))
         line_height = font_size * 1.25
         subtitle_height = line_height * max_lines
         if pos == "top":
@@ -1201,7 +1347,7 @@ def iniciar_app(procesar_video_fn):
         elif pos == "top-center":
             y = (safe_area + (inner_h - subtitle_height) / 2) / 2
         elif pos == "center":
-            y = (inner_h - subtitle_height) / 2
+            y = (inner_h - subtitle_height) / 2 + center_offset
         else:
             bottom_y = inner_h - safe_area - subtitle_height
             if pos == "bottom-center":
@@ -1390,12 +1536,21 @@ def iniciar_app(procesar_video_fn):
     )
     chk_force_pos.grid(row=4, column=0, sticky="w", pady=(0, 12))
 
+    use_ass_var = ctk.BooleanVar(value=True)
+    chk_use_ass = ctk.CTkCheckBox(
+        sub_left,
+        text="Usar ASS (más estable)",
+        variable=use_ass_var
+    )
+    chk_use_ass.grid(row=5, column=0, sticky="w", pady=(0, 12))
+
     def iniciar_subtitulado():
         if not sub_state["video"] or not sub_state["srt"]:
             log("Selecciona el video y el SRT primero.")
             return
         log_seccion("Subtitular video")
-        pos = pos_sub_var.get()
+        pos = "center"
+        pos_sub_var.set("center")
         try:
             font_size = int(entry_font.get().strip())
         except Exception:
@@ -1435,6 +1590,7 @@ def iniciar_app(procesar_video_fn):
                     True,
                     max_chars,
                     max_lines,
+                    use_ass_var.get(),
                     log
                 )
                 log("Finalizado proceso de subtitular video.")
@@ -1459,6 +1615,155 @@ def iniciar_app(procesar_video_fn):
         height=40
     )
     btn_sub_open.grid(row=6, column=0, sticky="ew", pady=(0, 8))
+
+    # --- IA TikTok ---
+    tab_ai = tabs.tab("IA TikTok")
+    tab_ai.grid_columnconfigure(0, weight=1)
+    tab_ai.grid_rowconfigure(0, weight=1)
+
+    ai_scroll = ctk.CTkScrollableFrame(tab_ai, corner_radius=0)
+    ai_scroll.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+    ai_scroll.grid_columnconfigure(0, weight=1)
+
+    ai_card = ctk.CTkFrame(ai_scroll, corner_radius=12)
+    ai_card.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    ai_card.grid_columnconfigure(0, weight=1)
+
+    lbl_ai_title = ctk.CTkLabel(
+        ai_card,
+        text="IA TikTok: Resumen + Descripción + Hashtags",
+        font=ctk.CTkFont(size=18, weight="bold")
+    )
+    lbl_ai_title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
+
+    lbl_ai_hint = ctk.CTkLabel(
+        ai_card,
+        text="Sube un SRT y genera texto listo para copiar.",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2"
+    )
+    lbl_ai_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
+
+    ai_state = {"srt": None}
+
+    ai_select = ctk.CTkFrame(ai_card, fg_color="transparent")
+    ai_select.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    ai_select.grid_columnconfigure(1, weight=1)
+
+    def on_click_ai_srt():
+        from ui.dialogs import seleccionar_archivo
+        srt = seleccionar_archivo("Seleccionar SRT", [("Subtitles", "*.srt")])
+        if srt:
+            ai_state["srt"] = srt
+            lbl_ai_srt.configure(text=os.path.basename(srt))
+            log(f"SRT seleccionado: {srt}")
+
+    btn_ai_srt = ctk.CTkButton(
+        ai_select,
+        text="Seleccionar SRT",
+        command=on_click_ai_srt,
+        height=40
+    )
+    btn_ai_srt.grid(row=0, column=0, sticky="w")
+
+    lbl_ai_srt = ctk.CTkLabel(
+        ai_select,
+        text="(sin srt seleccionado)",
+        font=ctk.CTkFont(size=12)
+    )
+    lbl_ai_srt.grid(row=0, column=1, sticky="w", padx=(12, 0))
+
+    ai_conf = ctk.CTkFrame(ai_card, fg_color="transparent")
+    ai_conf.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+    ai_conf.grid_columnconfigure(1, weight=1)
+
+    lbl_key = ctk.CTkLabel(ai_conf, text="API key (desde .env)", font=ctk.CTkFont(size=12))
+    lbl_key.grid(row=0, column=0, sticky="w")
+
+    lbl_key_hint = ctk.CTkLabel(
+        ai_conf,
+        text="Usa OPENAI_API_KEY en el archivo .env",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2"
+    )
+    lbl_key_hint.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    lbl_model_ai = ctk.CTkLabel(ai_conf, text="Modelo", font=ctk.CTkFont(size=12))
+    lbl_model_ai.grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+    model_ai_var = ctk.StringVar(value="gpt-4o-mini")
+    opt_model_ai = ctk.CTkOptionMenu(
+        ai_conf,
+        values=["gpt-4o-mini", "gpt-4o"],
+        variable=model_ai_var
+    )
+    opt_model_ai.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0))
+
+    def _set_textbox(tb, text):
+        tb.configure(state="normal")
+        tb.delete("1.0", "end")
+        tb.insert("end", text)
+        tb.configure(state="disabled")
+
+    def _copy_text(text):
+        ventana.clipboard_clear()
+        ventana.clipboard_append(text)
+        ventana.update_idletasks()
+
+    out_frame = ctk.CTkFrame(ai_card)
+    out_frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 12))
+    out_frame.grid_columnconfigure(0, weight=1)
+
+    lbl_res = ctk.CTkLabel(out_frame, text="Resumen", font=ctk.CTkFont(size=12))
+    lbl_res.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 4))
+    txt_res = ctk.CTkTextbox(out_frame, height=80)
+    txt_res.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
+
+    lbl_desc = ctk.CTkLabel(out_frame, text="Descripción", font=ctk.CTkFont(size=12))
+    lbl_desc.grid(row=2, column=0, sticky="w", padx=10, pady=(6, 4))
+    txt_desc = ctk.CTkTextbox(out_frame, height=110)
+    txt_desc.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 6))
+
+    lbl_tags = ctk.CTkLabel(out_frame, text="Hashtags", font=ctk.CTkFont(size=12))
+    lbl_tags.grid(row=4, column=0, sticky="w", padx=10, pady=(6, 4))
+    txt_tags = ctk.CTkTextbox(out_frame, height=70)
+    txt_tags.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+    def iniciar_ai():
+        if not ai_state["srt"]:
+            log("Selecciona un SRT primero.")
+            return
+        log_seccion("IA TikTok")
+        model = model_ai_var.get()
+
+        def run_ai():
+            try:
+                result = generar_descripcion_tiktok(ai_state["srt"], None, model, log)
+                _set_textbox(txt_res, result.get("resumen", ""))
+                _set_textbox(txt_desc, result.get("descripcion", ""))
+                _set_textbox(txt_tags, result.get("hashtags", ""))
+                log("Finalizado proceso IA TikTok.")
+                log("Fin de la automatizacion.")
+            except Exception as e:
+                log(f"Error IA TikTok: {e}")
+
+        threading.Thread(target=run_ai, daemon=True).start()
+
+    btn_ai_run = ctk.CTkButton(
+        ai_card,
+        text="Generar texto",
+        command=iniciar_ai,
+        height=46
+    )
+    btn_ai_run.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 8))
+
+    btn_copy_desc = ctk.CTkButton(
+        ai_card,
+        text="Copiar descripción + hashtags",
+        command=lambda: _copy_text((txt_desc.get("1.0", "end").strip() + "\n" + txt_tags.get("1.0", "end").strip()).strip()),
+        height=40
+    )
+    btn_copy_desc.grid(row=6, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- Actividad ---
     # --- Audio MP3 ---
