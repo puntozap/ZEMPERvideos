@@ -9,9 +9,27 @@ def seleccionar_video():
         ],
     )
 
+def seleccionar_videos():
+    return filedialog.askopenfilenames(
+        title="Seleccionar videos (max 3)",
+        filetypes=[
+            ("Videos", "*.mp4;*.mkv;*.mov;*.avi;*.flv;*.webm"),
+            ("Todos", "*.*"),
+        ],
+    )
+
 def seleccionar_audio():
     return filedialog.askopenfilename(
         title="Seleccionar audio",
+        filetypes=[
+            ("Audio", "*.wav;*.mp3;*.m4a;*.flac;*.ogg;*.webm;*.mp4"),
+            ("Todos", "*.*"),
+        ],
+    )
+
+def seleccionar_audios():
+    return filedialog.askopenfilenames(
+        title="Seleccionar audios (max 3)",
         filetypes=[
             ("Audio", "*.wav;*.mp3;*.m4a;*.flac;*.ogg;*.webm;*.mp4"),
             ("Todos", "*.*"),
@@ -29,6 +47,12 @@ def seleccionar_imagen():
 
 def seleccionar_archivo(title: str, filetypes):
     return filedialog.askopenfilename(
+        title=title,
+        filetypes=filetypes,
+    )
+
+def seleccionar_archivos(title: str, filetypes):
+    return filedialog.askopenfilenames(
         title=title,
         filetypes=filetypes,
     )

@@ -4,6 +4,7 @@ import re
 import math
 import tempfile
 from datetime import datetime
+from core import stop_control
 
 def asegurar_dir(path: str):
     if not os.path.exists(path):
@@ -189,6 +190,10 @@ def dividir_video_ffmpeg(
     paths = []
 
     for i in range(total_partes):
+        if stop_control.should_stop():
+            if log_fn:
+                log_fn("⛔ Proceso detenido por el usuario.")
+            break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
             break
@@ -315,6 +320,10 @@ def dividir_video_vertical_individual(
 
     paths = []
     for i in range(total_partes):
+        if stop_control.should_stop():
+            if log_fn:
+                log_fn("⛔ Proceso detenido por el usuario.")
+            break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
             break
@@ -515,6 +524,10 @@ def dividir_audio_ffmpeg(
     paths = []
 
     for i in range(total_partes):
+        if stop_control.should_stop():
+            if log_fn:
+                log_fn("⛔ Proceso detenido por el usuario.")
+            break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
             break
@@ -563,6 +576,10 @@ def dividir_audio_ffmpeg_partes(audio_path: str, partes: int = 5, log_fn=None):
     paths = []
 
     for i in range(partes):
+        if stop_control.should_stop():
+            if log_fn:
+                log_fn("⛔ Proceso detenido por el usuario.")
+            break
         inicio = i * duracion_segmento
         out_path = f"{base}_parte{i+1}.mp3"
 
@@ -587,6 +604,68 @@ def dividir_audio_ffmpeg_partes(audio_path: str, partes: int = 5, log_fn=None):
             log_fn(f"âœ” Fragmento {i+1}/{partes} listo: {out_path}")
 
     return paths
+
+def _parse_srt_time(ts: str) -> float:
+    # HH:MM:SS,mmm -> seconds
+    try:
+        hh, mm, rest = ts.split(":")
+        ss, ms = rest.split(",")
+        return int(hh) * 3600 + int(mm) * 60 + int(ss) + int(ms) / 1000.0
+    except Exception:
+        return 0.0
+
+def _format_srt_time(seconds: float) -> str:
+    if seconds < 0:
+        seconds = 0.0
+    hh = int(seconds // 3600)
+    mm = int((seconds % 3600) // 60)
+    ss = int(seconds % 60)
+    ms = int(round((seconds - int(seconds)) * 1000))
+    if ms >= 1000:
+        ms = 0
+        ss += 1
+        if ss >= 60:
+            ss = 0
+            mm += 1
+            if mm >= 60:
+                mm = 0
+                hh += 1
+    return f"{hh:02d}:{mm:02d}:{ss:02d},{ms:03d}"
+
+def combinar_srt_partes(srt_paths: list[str], offsets: list[float], out_path: str, log_fn=None) -> str:
+    """
+    Une varios SRT aplicando offsets de tiempo (en segundos).
+    """
+    if len(srt_paths) != len(offsets):
+        raise RuntimeError("Cantidad de SRT y offsets no coincide.")
+    combined = []
+    idx = 1
+    time_re = re.compile(r"(\d+:\d+:\d+,\d+)\s*-->\s*(\d+:\d+:\d+,\d+)")
+    for path, offset in zip(srt_paths, offsets):
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            data = f.read().replace("\r\n", "\n")
+        blocks = data.split("\n\n")
+        for block in blocks:
+            lines = [l for l in block.splitlines() if l.strip() != ""]
+            if len(lines) < 2:
+                continue
+            m = time_re.search(lines[1])
+            if not m:
+                continue
+            start = _parse_srt_time(m.group(1)) + offset
+            end = _parse_srt_time(m.group(2)) + offset
+            lines[0] = str(idx)
+            lines[1] = f"{_format_srt_time(start)} --> {_format_srt_time(end)}"
+            combined.append("\n".join(lines))
+            idx += 1
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n\n".join(combined))
+    if log_fn:
+        log_fn(f"SRT unido: {out_path}")
+    return out_path
 
 def limpiar_temp(path: str):
     """
@@ -678,6 +757,14 @@ def generar_vertical_tiktok(
     ]
     if log_fn:
         log_fn(f"🎞️ Generando vertical: {os.path.basename(output_path)}")
+        if orden.upper() == "LR":
+            log_fn("🔀 Orden: izquierda arriba / derecha abajo")
+        elif orden.upper() == "RL":
+            log_fn("🔀 Orden: derecha arriba / izquierda abajo")
+        else:
+            log_fn("🔀 Orden: personalizado")
+        log_fn("✂️ Recortando mitades y ajustando barras...")
+        log_fn("🧩 Apilando en formato 9:16...")
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def aplicar_fondo_imagen(

@@ -1,4 +1,6 @@
 import os
+import json
+import re
 import time
 import threading
 import customtkinter as ctk
@@ -6,11 +8,13 @@ import tkinter as tk
 from tkinter import colorchooser
 from PIL import Image, ImageTk, ImageDraw
 from moviepy import VideoFileClip
+import winsound
 from core.extractor import extraer_audio
 from core.workflow import procesar_corte_individual, procesar_srt, procesar_quemar_srt
-from core.ai_tiktok import generar_descripcion_tiktok
+from core.ai_tiktok import generar_descripcion_tiktok, generar_recomendaciones_clips
 from core.youtube_downloader import descargar_audio_youtube, descargar_video_youtube_mp4
 from core.utils import obtener_duracion_segundos, nombre_base_fuente
+from core import stop_control
 
 
 class SimpleVideoPlayer:
@@ -157,6 +161,112 @@ def iniciar_app(procesar_video_fn):
         txt_logs.see("end")
         txt_logs.configure(state="disabled")
 
+    def beep_fin():
+        try:
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
+
+    def alerta_busy():
+        popup = ctk.CTkToplevel(ventana)
+        popup.title("Proceso en ejecucion")
+        popup.geometry("360x160")
+        popup.resizable(False, False)
+        popup.grab_set()
+        lbl = ctk.CTkLabel(
+            popup,
+            text="Ya hay un proceso en ejecucion.\nEspera a que termine o presiona Detener.",
+            font=ctk.CTkFont(size=12)
+        )
+        lbl.pack(padx=16, pady=(24, 12))
+        btn_ok = ctk.CTkButton(popup, text="OK", command=popup.destroy, width=120)
+        btn_ok.pack(pady=(0, 16))
+
+    def _es_dentro_output(path: str) -> bool:
+        try:
+            output_root = os.path.abspath("output")
+            return os.path.commonpath([os.path.abspath(path), output_root]) == output_root
+        except Exception:
+            return False
+
+    def _renombrar_relacionados(old_base: str, new_base: str):
+        if not old_base or not new_base or old_base == new_base:
+            return
+        output_root = os.path.abspath("output")
+        targets = [
+            os.path.join(output_root, "videos"),
+            os.path.join(output_root, "audios"),
+            os.path.join(output_root, "subtitulos"),
+            os.path.join(output_root, "downloads"),
+        ]
+        for base_dir in targets:
+            if not os.path.exists(base_dir):
+                continue
+            old_dir = os.path.join(base_dir, old_base)
+            new_dir = os.path.join(base_dir, new_base)
+            if os.path.isdir(old_dir) and not os.path.exists(new_dir):
+                try:
+                    os.rename(old_dir, new_dir)
+                except Exception as e:
+                    log(f"No se pudo renombrar carpeta {old_dir}: {e}")
+                    continue
+            # Renombrar archivos que contengan el nombre anterior
+            for root_dir, _dirs, files in os.walk(base_dir):
+                for fname in files:
+                    if old_base not in fname:
+                        continue
+                    src = os.path.join(root_dir, fname)
+                    dst_name = fname.replace(old_base, new_base)
+                    dst = os.path.join(root_dir, dst_name)
+                    if src == dst:
+                        continue
+                    if os.path.exists(dst):
+                        continue
+                    try:
+                        os.rename(src, dst)
+                    except Exception as e:
+                        log(f"No se pudo renombrar {src}: {e}")
+
+    def _renombrar_si_largo(path: str):
+        if not path:
+            return None
+        max_name = 80
+        base = os.path.basename(path)
+        if len(base) <= max_name:
+            return path
+        dirname = os.path.dirname(path)
+        stem, ext = os.path.splitext(base)
+        in_output = _es_dentro_output(path)
+        old_base = os.path.splitext(os.path.basename(path))[0]
+        while len(os.path.basename(path)) > max_name:
+            dialog = ctk.CTkInputDialog(
+                text="El nombre es muy largo. Escribe un nombre mas corto:",
+                title="Renombrar archivo"
+            )
+            nuevo = dialog.get_input()
+            if not nuevo:
+                return None
+            nuevo = nuevo.strip()
+            if not nuevo:
+                continue
+            if not nuevo.lower().endswith(ext.lower()):
+                nuevo = nuevo + ext
+            nuevo_path = os.path.join(dirname, nuevo)
+            try:
+                if os.path.exists(nuevo_path):
+                    log("Ese nombre ya existe. Usa otro.")
+                    continue
+                os.rename(path, nuevo_path)
+                path = nuevo_path
+                if in_output:
+                    new_base = os.path.splitext(os.path.basename(path))[0]
+                    _renombrar_relacionados(old_base, new_base)
+                    old_base = new_base
+            except Exception as e:
+                log(f"No se pudo renombrar: {e}")
+                return None
+        return path
+
     def log_seccion(titulo):
         tabs.set("Actividad")
         log("")
@@ -233,6 +343,11 @@ def iniciar_app(procesar_video_fn):
         if not estado["path"]:
             log("Selecciona un video primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("Corte")
         minutos = leer_minutos()
         inicio_min, fin_min = leer_rango_minutos()
@@ -272,8 +387,11 @@ def iniciar_app(procesar_video_fn):
                 )
                 log("Finalizado proceso de corte.")
                 log("Fin de la automatizacion.")
+                beep_fin()
             except Exception as e:
                 log(f"Error en corte: {e}")
+            finally:
+                stop_control.set_busy(False)
 
         threading.Thread(target=run_corte, daemon=True).start()
 
@@ -382,16 +500,47 @@ def iniciar_app(procesar_video_fn):
     tabs = ctk.CTkTabview(root, corner_radius=12)
     tabs.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
     tabs.add("Corte")
-    tabs.add("Corte individual")
-    tabs.add("SRT")
-    tabs.add("Subtitular video")
-    tabs.add("IA TikTok")
-    tabs.add("Audio MP3")
-    tabs.add("YouTube MP3")
-    tabs.add("YouTube MP4")
+    tabs.add("Subtitulos")
+    tabs.add("IA generadores")
+    tabs.add("Descargas")
     tabs.add("Actividad")
 
-    tab_corte = tabs.tab("Corte")
+    tab_corte_main = tabs.tab("Corte")
+    tab_sub_main = tabs.tab("Subtitulos")
+    tab_ia_main = tabs.tab("IA generadores")
+    tab_desc_main = tabs.tab("Descargas")
+    tab_act = tabs.tab("Actividad")
+
+    corte_tabs = ctk.CTkTabview(tab_corte_main, corner_radius=10)
+    corte_tabs.pack(fill="both", expand=True, padx=6, pady=6)
+    corte_tabs.add("Corte editado")
+    corte_tabs.add("Corte individual")
+
+    sub_tabs = ctk.CTkTabview(tab_sub_main, corner_radius=10)
+    sub_tabs.pack(fill="both", expand=True, padx=6, pady=6)
+    sub_tabs.add("Generar subtitulos")
+    sub_tabs.add("Subtitular video")
+
+    ia_tabs = ctk.CTkTabview(tab_ia_main, corner_radius=10)
+    ia_tabs.pack(fill="both", expand=True, padx=6, pady=6)
+    ia_tabs.add("IA Clips")
+    ia_tabs.add("IA TikTok")
+
+    desc_tabs = ctk.CTkTabview(tab_desc_main, corner_radius=10)
+    desc_tabs.pack(fill="both", expand=True, padx=6, pady=6)
+    desc_tabs.add("Audio MP3")
+    desc_tabs.add("YouTube MP3")
+    desc_tabs.add("YouTube MP4")
+
+    tab_corte = corte_tabs.tab("Corte editado")
+    tab_ind = corte_tabs.tab("Corte individual")
+    tab_srt = sub_tabs.tab("Generar subtitulos")
+    tab_sub = sub_tabs.tab("Subtitular video")
+    tab_clips = ia_tabs.tab("IA Clips")
+    tab_ai = ia_tabs.tab("IA TikTok")
+    tab_audio = desc_tabs.tab("Audio MP3")
+    tab_youtube = desc_tabs.tab("YouTube MP3")
+    tab_youtube_mp4 = desc_tabs.tab("YouTube MP4")
     tab_corte.grid_columnconfigure(0, weight=1)
     tab_corte.grid_rowconfigure(0, weight=1)
 
@@ -643,7 +792,6 @@ def iniciar_app(procesar_video_fn):
     lbl_duracion_val.grid(row=4, column=2, sticky="e")
 
     # --- Corte individual ---
-    tab_ind = tabs.tab("Corte individual")
     tab_ind.grid_columnconfigure(0, weight=1)
     tab_ind.grid_rowconfigure(0, weight=1)
 
@@ -678,6 +826,9 @@ def iniciar_app(procesar_video_fn):
         from ui.dialogs import seleccionar_video
         video = seleccionar_video()
         if video:
+            video = _renombrar_si_largo(video)
+            if not video:
+                return
             estado["path"] = video
             estado["es_audio"] = False
             set_preview_enabled(True)
@@ -967,6 +1118,11 @@ def iniciar_app(procesar_video_fn):
         if not estado["path"]:
             log("Selecciona un video primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("Corte individual")
         minutos = leer_minutos_ind()
         inicio_min, fin_min = leer_rango_minutos_ind()
@@ -1022,8 +1178,11 @@ def iniciar_app(procesar_video_fn):
                 )
                 log("Finalizado proceso de corte individual.")
                 log("Fin de la automatizacion.")
+                beep_fin()
             except Exception as e:
                 log(f"Error en corte individual: {e}")
+            finally:
+                stop_control.set_busy(False)
 
         threading.Thread(target=run_individual, daemon=True).start()
 
@@ -1044,7 +1203,6 @@ def iniciar_app(procesar_video_fn):
     btn_ind_open.grid(row=21, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- SRT ---
-    tab_srt = tabs.tab("SRT")
     tab_srt.grid_columnconfigure(0, weight=1)
     tab_srt.grid_rowconfigure(0, weight=1)
 
@@ -1071,29 +1229,43 @@ def iniciar_app(procesar_video_fn):
     )
     lbl_srt_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
 
-    srt_state = {"path": None, "es_audio": False}
+    srt_state = {"items": []}
 
     srt_select = ctk.CTkFrame(srt_card, fg_color="transparent")
     srt_select.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
     srt_select.grid_columnconfigure(1, weight=1)
 
     def on_click_srt_video():
-        from ui.dialogs import seleccionar_video
-        video = seleccionar_video()
-        if video:
-            srt_state["path"] = video
-            srt_state["es_audio"] = False
-            lbl_srt_file.configure(text=os.path.basename(video))
-            log(f"Video seleccionado: {video}")
+        from ui.dialogs import seleccionar_videos
+        videos = seleccionar_videos()
+        if videos:
+            items = []
+            for v in videos[:3]:
+                v = _renombrar_si_largo(v)
+                if v:
+                    items.append((v, False))
+            if not items:
+                return
+            srt_state["items"] = items
+            lbl_srt_file.configure(text=f"{len(items)} video(s) seleccionados")
+            for v, _ in items:
+                log(f"Video seleccionado: {v}")
 
     def on_click_srt_audio():
-        from ui.dialogs import seleccionar_audio
-        audio = seleccionar_audio()
-        if audio:
-            srt_state["path"] = audio
-            srt_state["es_audio"] = True
-            lbl_srt_file.configure(text=os.path.basename(audio))
-            log(f"Audio seleccionado: {audio}")
+        from ui.dialogs import seleccionar_audios
+        audios = seleccionar_audios()
+        if audios:
+            items = []
+            for a in audios[:3]:
+                a = _renombrar_si_largo(a)
+                if a:
+                    items.append((a, True))
+            if not items:
+                return
+            srt_state["items"] = items
+            lbl_srt_file.configure(text=f"{len(items)} audio(s) seleccionados")
+            for a, _ in items:
+                log(f"Audio seleccionado: {a}")
 
     btn_srt_video = ctk.CTkButton(
         srt_select,
@@ -1195,9 +1367,14 @@ def iniciar_app(procesar_video_fn):
     _toggle_adv()
 
     def iniciar_srt():
-        if not srt_state["path"]:
-            log("Selecciona un video o audio primero.")
+        if not srt_state["items"]:
+            log("Selecciona videos o audio primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("SRT")
         idioma = idioma_var.get()
         if idioma == "auto":
@@ -1217,19 +1394,27 @@ def iniciar_app(procesar_video_fn):
 
         def run_srt():
             try:
-                procesar_srt(
-                    srt_state["path"],
-                    srt_state["es_audio"],
-                    idioma,
-                    model,
-                    temperature,
-                    beam_size,
-                    log
-                )
+                for idx, (path, is_audio) in enumerate(srt_state["items"], start=1):
+                    if stop_control.should_stop():
+                        log("⛔ Proceso detenido por el usuario.")
+                        return
+                    log(f"Transcribiendo {idx}/{len(srt_state['items'])}...")
+                    procesar_srt(
+                        path,
+                        is_audio,
+                        idioma,
+                        model,
+                        temperature,
+                        beam_size,
+                        log
+                    )
                 log("Finalizado proceso de SRT.")
                 log("Fin de la automatizacion.")
+                beep_fin()
             except Exception as e:
                 log(f"Error en SRT: {e}")
+            finally:
+                stop_control.set_busy(False)
 
         threading.Thread(target=run_srt, daemon=True).start()
 
@@ -1250,7 +1435,6 @@ def iniciar_app(procesar_video_fn):
     btn_srt_open.grid(row=7, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- Subtitular video ---
-    tab_sub = tabs.tab("Subtitular video")
     tab_sub.grid_columnconfigure(0, weight=1)
     tab_sub.grid_rowconfigure(0, weight=1)
 
@@ -1282,7 +1466,7 @@ def iniciar_app(procesar_video_fn):
     sub_left.grid(row=2, column=0, sticky="nsew", padx=16, pady=(0, 16))
     sub_left.grid_columnconfigure(1, weight=1)
 
-    sub_state = {"video": None, "srt": None}
+    sub_state = {"videos": [], "srts": []}
 
     sub_select = ctk.CTkFrame(sub_left, fg_color="transparent")
     sub_select.grid(row=0, column=0, sticky="ew", pady=(0, 12))
@@ -1428,21 +1612,43 @@ def iniciar_app(procesar_video_fn):
             prev_label.configure(text=f"Preview error: {e}", image="")
 
     def on_click_sub_video():
-        from ui.dialogs import seleccionar_video
-        video = seleccionar_video()
-        if video:
-            sub_state["video"] = video
-            lbl_sub_video.configure(text=os.path.basename(video))
-            log(f"Video seleccionado: {video}")
-            actualizar_preview_sub()
+        from ui.dialogs import seleccionar_videos
+        videos = seleccionar_videos()
+        if videos:
+            items = []
+            for v in videos:
+                v = _renombrar_si_largo(v)
+                if v:
+                    items.append(v)
+            if not items:
+                return
+            sub_state["videos"] = items
+            if len(items) == 1:
+                lbl_sub_video.configure(text=os.path.basename(items[0]))
+                actualizar_preview_sub()
+            else:
+                lbl_sub_video.configure(text=f"{len(items)} video(s) seleccionados")
+            for v in items:
+                log(f"Video seleccionado: {v}")
 
     def on_click_sub_srt():
-        from ui.dialogs import seleccionar_archivo
-        srt = seleccionar_archivo("Seleccionar SRT", [("Subtitles", "*.srt")])
-        if srt:
-            sub_state["srt"] = srt
-            lbl_sub_srt.configure(text=os.path.basename(srt))
-            log(f"SRT seleccionado: {srt}")
+        from ui.dialogs import seleccionar_archivos
+        srts = seleccionar_archivos("Seleccionar SRT", [("Subtitles", "*.srt")])
+        if srts:
+            items = []
+            for s in srts:
+                s = _renombrar_si_largo(s)
+                if s:
+                    items.append(s)
+            if not items:
+                return
+            sub_state["srts"] = items
+            if len(items) == 1:
+                lbl_sub_srt.configure(text=os.path.basename(items[0]))
+            else:
+                lbl_sub_srt.configure(text=f"{len(items)} srt(s) seleccionados")
+            for s in items:
+                log(f"SRT seleccionado: {s}")
 
     pos_sub_var.trace_add("write", lambda *_: actualizar_preview_sub())
     def _schedule_preview_update(_e=None):
@@ -1545,9 +1751,14 @@ def iniciar_app(procesar_video_fn):
     chk_use_ass.grid(row=5, column=0, sticky="w", pady=(0, 12))
 
     def iniciar_subtitulado():
-        if not sub_state["video"] or not sub_state["srt"]:
-            log("Selecciona el video y el SRT primero.")
+        if not sub_state["videos"] or not sub_state["srts"]:
+            log("Selecciona video(s) y SRT(s) primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("Subtitular video")
         pos = "center"
         pos_sub_var.set("center")
@@ -1578,25 +1789,65 @@ def iniciar_app(procesar_video_fn):
         if shadow < 0:
             shadow = 0
 
+        def _norm_name(path: str) -> str:
+            base = os.path.splitext(os.path.basename(path))[0].lower()
+            base = re.sub(r"[^a-z0-9]+", " ", base).strip()
+            for suf in ["_original", "_completo", "_srt", "_subt", "_sub", "original", "completo"]:
+                base = base.replace(suf.replace("_", " "), "").strip()
+            return base
+
         def run_sub():
             try:
-                procesar_quemar_srt(
-                    sub_state["video"],
-                    sub_state["srt"],
-                    pos,
-                    font_size,
-                    outline,
-                    shadow,
-                    True,
-                    max_chars,
-                    max_lines,
-                    use_ass_var.get(),
-                    log
-                )
+                videos = sub_state["videos"]
+                srts = sub_state["srts"]
+                if len(videos) == 1 and len(srts) == 1:
+                    procesar_quemar_srt(
+                        videos[0],
+                        srts[0],
+                        pos,
+                        font_size,
+                        outline,
+                        shadow,
+                        True,
+                        max_chars,
+                        max_lines,
+                        use_ass_var.get(),
+                        log
+                    )
+                else:
+                    srt_map = {}
+                    for s in srts:
+                        srt_map[_norm_name(s)] = s
+                    for idx, v in enumerate(videos, start=1):
+                        if stop_control.should_stop():
+                            log("⛔ Proceso detenido por el usuario.")
+                            return
+                        key = _norm_name(v)
+                        srt_match = srt_map.get(key)
+                        if not srt_match:
+                            log(f"No se encontro SRT para: {os.path.basename(v)}")
+                            continue
+                        log(f"Subtitulando {idx}/{len(videos)}: {os.path.basename(v)}")
+                        procesar_quemar_srt(
+                            v,
+                            srt_match,
+                            pos,
+                            font_size,
+                            outline,
+                            shadow,
+                            True,
+                            max_chars,
+                            max_lines,
+                            use_ass_var.get(),
+                            log
+                        )
                 log("Finalizado proceso de subtitular video.")
                 log("Fin de la automatizacion.")
+                beep_fin()
             except Exception as e:
                 log(f"Error subtitulando: {e}")
+            finally:
+                stop_control.set_busy(False)
 
         threading.Thread(target=run_sub, daemon=True).start()
 
@@ -1616,8 +1867,138 @@ def iniciar_app(procesar_video_fn):
     )
     btn_sub_open.grid(row=6, column=0, sticky="ew", pady=(0, 8))
 
+    # --- IA Clips ---
+    tab_clips.grid_columnconfigure(0, weight=1)
+    tab_clips.grid_rowconfigure(0, weight=1)
+
+    clips_scroll = ctk.CTkScrollableFrame(tab_clips, corner_radius=0)
+    clips_scroll.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+    clips_scroll.grid_columnconfigure(0, weight=1)
+
+    clips_card = ctk.CTkFrame(clips_scroll, corner_radius=12)
+    clips_card.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    clips_card.grid_columnconfigure(0, weight=1)
+
+    lbl_clips_title = ctk.CTkLabel(
+        clips_card,
+        text="IA Clips: Rangos virales desde SRT",
+        font=ctk.CTkFont(size=18, weight="bold")
+    )
+    lbl_clips_title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
+
+    lbl_clips_hint = ctk.CTkLabel(
+        clips_card,
+        text="Selecciona un SRT y genera rangos recomendados con IA.",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2"
+    )
+    lbl_clips_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
+
+    clips_state = {"srt": None}
+
+    clips_select = ctk.CTkFrame(clips_card, fg_color="transparent")
+    clips_select.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    clips_select.grid_columnconfigure(1, weight=1)
+
+    def on_click_clips_srt():
+        from ui.dialogs import seleccionar_archivo
+        srt = seleccionar_archivo("Seleccionar SRT", [("Subtitles", "*.srt")])
+        if srt:
+            srt = _renombrar_si_largo(srt)
+            if not srt:
+                return
+            clips_state["srt"] = srt
+            lbl_clips_srt.configure(text=os.path.basename(srt))
+            log(f"SRT seleccionado: {srt}")
+
+    btn_clips_srt = ctk.CTkButton(
+        clips_select,
+        text="Seleccionar SRT",
+        command=on_click_clips_srt,
+        height=40
+    )
+    btn_clips_srt.grid(row=0, column=0, sticky="w")
+
+    lbl_clips_srt = ctk.CTkLabel(
+        clips_select,
+        text="(sin srt seleccionado)",
+        font=ctk.CTkFont(size=12)
+    )
+    lbl_clips_srt.grid(row=0, column=1, sticky="w", padx=(12, 0))
+
+    clips_conf = ctk.CTkFrame(clips_card, fg_color="transparent")
+    clips_conf.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+    clips_conf.grid_columnconfigure(1, weight=1)
+
+    lbl_model_clips = ctk.CTkLabel(clips_conf, text="Modelo", font=ctk.CTkFont(size=12))
+    lbl_model_clips.grid(row=0, column=0, sticky="w")
+
+    model_clips_var = ctk.StringVar(value="gpt-4o-mini")
+    opt_model_clips = ctk.CTkOptionMenu(
+        clips_conf,
+        values=["gpt-4o-mini", "gpt-4o"],
+        variable=model_clips_var
+    )
+    opt_model_clips.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    clips_out = ctk.CTkFrame(clips_card)
+    clips_out.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 12))
+    clips_out.grid_columnconfigure(0, weight=1)
+
+    lbl_clips_out = ctk.CTkLabel(clips_out, text="Resultado", font=ctk.CTkFont(size=12))
+    lbl_clips_out.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 4))
+
+    txt_clips = ctk.CTkTextbox(clips_out, height=220)
+    txt_clips.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+    txt_clips.configure(state="disabled")
+
+    lbl_json = ctk.CTkLabel(clips_card, text="JSON: (sin generar)", font=ctk.CTkFont(size=12))
+    lbl_json.grid(row=5, column=0, sticky="w", padx=16, pady=(0, 8))
+
+    def iniciar_ai_clips():
+        if not clips_state["srt"]:
+            log("Selecciona un SRT primero.")
+            return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
+        log_seccion("IA Clips")
+        model = model_clips_var.get()
+
+        def run_clips():
+            try:
+                result = generar_recomendaciones_clips(clips_state["srt"], None, model, log)
+                data = result.get("data", {})
+                json_path = result.get("json_path", "")
+                text_out = result.get("text", "")
+                txt_clips.configure(state="normal")
+                txt_clips.delete("1.0", "end")
+                txt_clips.insert("end", text_out.strip())
+                txt_clips.configure(state="disabled")
+                if json_path:
+                    lbl_json.configure(text=f"JSON creado: {json_path}")
+                    log(f"JSON creado: {json_path}")
+                log("Finalizado proceso IA Clips.")
+                log("Fin de la automatizacion.")
+                beep_fin()
+            except Exception as e:
+                log(f"Error IA Clips: {e}")
+            finally:
+                stop_control.set_busy(False)
+
+        threading.Thread(target=run_clips, daemon=True).start()
+
+    btn_clips_run = ctk.CTkButton(
+        clips_card,
+        text="Generar recomendaciones",
+        command=iniciar_ai_clips,
+        height=46
+    )
+    btn_clips_run.grid(row=6, column=0, sticky="ew", padx=16, pady=(0, 16))
+
     # --- IA TikTok ---
-    tab_ai = tabs.tab("IA TikTok")
     tab_ai.grid_columnconfigure(0, weight=1)
     tab_ai.grid_rowconfigure(0, weight=1)
 
@@ -1714,38 +2095,52 @@ def iniciar_app(procesar_video_fn):
     out_frame.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 12))
     out_frame.grid_columnconfigure(0, weight=1)
 
+    lbl_title_ai = ctk.CTkLabel(out_frame, text="Titulo (clickbait)", font=ctk.CTkFont(size=12))
+    lbl_title_ai.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 4))
+    txt_title_ai = ctk.CTkTextbox(out_frame, height=50)
+    txt_title_ai.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
+
     lbl_res = ctk.CTkLabel(out_frame, text="Resumen", font=ctk.CTkFont(size=12))
-    lbl_res.grid(row=0, column=0, sticky="w", padx=10, pady=(10, 4))
+    lbl_res.grid(row=2, column=0, sticky="w", padx=10, pady=(6, 4))
     txt_res = ctk.CTkTextbox(out_frame, height=80)
-    txt_res.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 6))
+    txt_res.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 6))
 
     lbl_desc = ctk.CTkLabel(out_frame, text="Descripción", font=ctk.CTkFont(size=12))
-    lbl_desc.grid(row=2, column=0, sticky="w", padx=10, pady=(6, 4))
+    lbl_desc.grid(row=4, column=0, sticky="w", padx=10, pady=(6, 4))
     txt_desc = ctk.CTkTextbox(out_frame, height=110)
-    txt_desc.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 6))
+    txt_desc.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 6))
 
     lbl_tags = ctk.CTkLabel(out_frame, text="Hashtags", font=ctk.CTkFont(size=12))
-    lbl_tags.grid(row=4, column=0, sticky="w", padx=10, pady=(6, 4))
+    lbl_tags.grid(row=6, column=0, sticky="w", padx=10, pady=(6, 4))
     txt_tags = ctk.CTkTextbox(out_frame, height=70)
-    txt_tags.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 10))
+    txt_tags.grid(row=7, column=0, sticky="ew", padx=10, pady=(0, 10))
 
     def iniciar_ai():
         if not ai_state["srt"]:
             log("Selecciona un SRT primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("IA TikTok")
         model = model_ai_var.get()
 
         def run_ai():
             try:
                 result = generar_descripcion_tiktok(ai_state["srt"], None, model, log)
+                _set_textbox(txt_title_ai, result.get("titulo", ""))
                 _set_textbox(txt_res, result.get("resumen", ""))
                 _set_textbox(txt_desc, result.get("descripcion", ""))
                 _set_textbox(txt_tags, result.get("hashtags", ""))
                 log("Finalizado proceso IA TikTok.")
                 log("Fin de la automatizacion.")
+                beep_fin()
             except Exception as e:
                 log(f"Error IA TikTok: {e}")
+            finally:
+                stop_control.set_busy(False)
 
         threading.Thread(target=run_ai, daemon=True).start()
 
@@ -1767,7 +2162,6 @@ def iniciar_app(procesar_video_fn):
 
     # --- Actividad ---
     # --- Audio MP3 ---
-    tab_audio = tabs.tab("Audio MP3")
     tab_audio.grid_columnconfigure(0, weight=1)
     tab_audio.grid_rowconfigure(0, weight=1)
 
@@ -1800,6 +2194,9 @@ def iniciar_app(procesar_video_fn):
         from ui.dialogs import seleccionar_video
         video = seleccionar_video()
         if video:
+            video = _renombrar_si_largo(video)
+            if not video:
+                return
             audio_state["video_path"] = video
             lbl_audio_file.configure(text=os.path.basename(video))
             log(f"Video seleccionado para MP3: {video}")
@@ -1824,6 +2221,11 @@ def iniciar_app(procesar_video_fn):
         if not video_path:
             log("Selecciona un video para extraer el audio.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("Audio MP3")
         base_name = nombre_base_fuente(video_path)
         audio_dir_base = os.path.join("output", "audios", base_name)
@@ -1831,12 +2233,15 @@ def iniciar_app(procesar_video_fn):
         out_path = os.path.join(audio_dir_base, f"{base_name}_original.mp3")
         log("Extrayendo audio en MP3...")
         try:
-            extraer_audio(video_path, out_path)
+            extraer_audio(video_path, out_path, log)
             log(f"✅ Audio MP3 guardado: {out_path}")
             log("Finalizado proceso de audio MP3.")
             log("Fin de la automatizacion.")
+            beep_fin()
         except Exception as e:
             log(f"Error extrayendo MP3: {e}")
+        finally:
+            stop_control.set_busy(False)
 
     def iniciar_audio_mp3():
         threading.Thread(target=extraer_audio_mp3, daemon=True).start()
@@ -1858,7 +2263,6 @@ def iniciar_app(procesar_video_fn):
     btn_audio_open.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- YouTube MP3 ---
-    tab_youtube = tabs.tab("YouTube MP3")
     tab_youtube.grid_columnconfigure(0, weight=1)
     tab_youtube.grid_rowconfigure(0, weight=1)
 
@@ -1902,6 +2306,11 @@ def iniciar_app(procesar_video_fn):
         if not url:
             log("Pega un link de YouTube primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("YouTube MP3")
         log("Descargando audio de YouTube...")
         try:
@@ -1909,8 +2318,11 @@ def iniciar_app(procesar_video_fn):
             log(f"✅ Audio MP3 guardado: {out_path}")
             log("Finalizado proceso de YouTube MP3.")
             log("Fin de la automatizacion.")
+            beep_fin()
         except Exception as e:
             log(f"Error descargando MP3 de YouTube: {e}")
+        finally:
+            stop_control.set_busy(False)
 
     def iniciar_descarga_youtube():
         threading.Thread(target=descargar_mp3_youtube, daemon=True).start()
@@ -1932,7 +2344,6 @@ def iniciar_app(procesar_video_fn):
     btn_yt_open.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- YouTube MP4 ---
-    tab_youtube_mp4 = tabs.tab("YouTube MP4")
     tab_youtube_mp4.grid_columnconfigure(0, weight=1)
     tab_youtube_mp4.grid_rowconfigure(0, weight=1)
 
@@ -1976,6 +2387,11 @@ def iniciar_app(procesar_video_fn):
         if not url:
             log("Pega un link de YouTube primero.")
             return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
         log_seccion("YouTube MP4")
         log("Descargando video de YouTube...")
         try:
@@ -1983,8 +2399,11 @@ def iniciar_app(procesar_video_fn):
             log(f"✅ Video MP4 guardado: {out_path}")
             log("Finalizado proceso de YouTube MP4.")
             log("Fin de la automatizacion.")
+            beep_fin()
         except Exception as e:
             log(f"Error descargando MP4 de YouTube: {e}")
+        finally:
+            stop_control.set_busy(False)
 
     def iniciar_descarga_youtube_mp4():
         threading.Thread(target=descargar_mp4_youtube, daemon=True).start()
@@ -2006,7 +2425,6 @@ def iniciar_app(procesar_video_fn):
     btn_yt_mp4_open.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     # --- Actividad ---
-    tab_act = tabs.tab("Actividad")
     tab_act.grid_columnconfigure(0, weight=2)
     tab_act.grid_columnconfigure(1, weight=1)
     tab_act.grid_rowconfigure(0, weight=1)
@@ -2042,6 +2460,16 @@ def iniciar_app(procesar_video_fn):
         height=40
     )
     btn_eliminar.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 12))
+
+    btn_stop = ctk.CTkButton(
+        tools,
+        text="Detener procesos",
+        command=lambda: stop_control.request_stop(log),
+        fg_color="#b45309",
+        hover_color="#92400e",
+        height=40
+    )
+    btn_stop.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 12))
 
     set_preview_enabled(True)
     actualizar_etiquetas_rango()

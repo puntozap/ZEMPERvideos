@@ -1,9 +1,10 @@
-import os
+﻿import os
 import sys
 import subprocess
 import time
 import yt_dlp
 from yt_dlp.utils import DownloadError
+from core import stop_control
 
 def _actualizar_yt_dlp(log_fn=None):
     if log_fn:
@@ -36,6 +37,8 @@ def _descargar_youtube(
             return f"{num:.2f}PiB"
 
         def _progress_hook(d):
+            if stop_control.should_stop():
+                raise DownloadError("Stop requested")
             status = d.get("status")
             if status == "finished":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate")
@@ -69,6 +72,8 @@ def _descargar_youtube(
         opciones["cookiesfrombrowser"] = cookies_from_browser
 
     try:
+        if stop_control.should_stop():
+            raise DownloadError("Stop requested")
         with yt_dlp.YoutubeDL(opciones) as ydl:
             info = ydl.extract_info(url, download=True)
             return ydl.prepare_filename(info)
@@ -117,7 +122,7 @@ def descargar_audio_youtube(
     os.makedirs(output_dir, exist_ok=True)
 
     # Plantilla de salida (sin espacios raros en el nombre del archivo)
-    output_path = os.path.join(output_dir, "%(title).80s", "%(title).80s.%(ext)s")
+    output_path = os.path.join(output_dir, "%(title).20s", "%(title).20s.%(ext)s")
 
     opciones = {
         "format": "bestaudio/best",
@@ -158,7 +163,7 @@ def descargar_video_youtube_mp4(
     Devuelve la ruta al archivo descargado.
     """
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "%(title).80s", "%(title).80s.%(ext)s")
+    output_path = os.path.join(output_dir, "%(title).20s", "%(title).20s.%(ext)s")
 
     opciones = {
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
