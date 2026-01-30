@@ -9,7 +9,10 @@ from core.utils import (
     dividir_video_ffmpeg,
     dividir_video_vertical_individual,
     quemar_srt_en_video,
-    nombre_base_fuente,
+    nombre_base_principal,
+    output_base_dir,
+    next_correlative_dir,
+    output_subtitulados_dir,
     guardar_resumen_rango,
     generar_vertical_tiktok,
     aplicar_fondo_imagen,
@@ -48,7 +51,12 @@ def procesar_video(
 
     try:
         if logs: logs("Iniciando procesamiento...")
-        base_name = nombre_base_fuente(video_path)
+        base_name = nombre_base_principal(video_path)
+        base_dir = output_base_dir(video_path)
+        output_videos = []
+        cortes_dir = None
+        vertical_dir = None
+        partes_video = []
         segundos_por_parte = max(1.0, float(minutos_por_parte) * 60)
         start_sec = float(inicio_min) * 60 if inicio_min is not None else 0.0
         end_sec = float(fin_min) * 60 if fin_min is not None else None
@@ -69,11 +77,11 @@ def procesar_video(
             else:
                 if logs: logs(f"Video seleccionado: {video_path}")
                 if logs: logs("Extrayendo audio...")
-                audio_dir_base = f"output/audios/{base_name}"
+                audio_dir_base = os.path.join(base_dir, "audios")
                 os.makedirs(audio_dir_base, exist_ok=True)
                 audio_path = os.path.join(audio_dir_base, f"{base_name}_original.mp3")
                 audio_path = extraer_audio(video_path, audio_path, logs if logs else None)
-                if logs: logs(f"✅ Audio original guardado: {audio_path}")
+                if logs: logs(f"Audio original guardado: {audio_path}")
         else:
             if logs: logs(f"Video seleccionado: {video_path}")
 
@@ -81,24 +89,19 @@ def procesar_video(
         if not es_audio and dividir_video:
             if vertical_tiktok:
                 if logs: logs("Generando vertical TikTok sin cortes normales...")
-            else:
-                if logs: logs("Dividiendo video en partes...")
-            video_dir = f"output/videos/{base_name}"
-            if vertical_tiktok:
-                # Crear directamente los verticales sin guardar cortes normales
-                os.makedirs(video_dir, exist_ok=True)
+                vertical_dir = next_correlative_dir(base_dir, "verticales", "vertical-corte")
                 partes_video = []
                 total_partes = max(1, math.ceil((end_sec - start_sec) / segundos_por_parte)) if end_sec else None
                 for i in range(total_partes or 0):
                     if stop_control.should_stop():
-                        if logs: logs("⛔ Proceso detenido por el usuario.")
+                        if logs: logs("Proceso detenido por el usuario.")
                         return
                     inicio = start_sec + i * segundos_por_parte
                     if end_sec is not None and inicio >= end_sec:
                         break
                     duracion_parte = min(segundos_por_parte, max(0.1, (end_sec - inicio) if end_sec else segundos_por_parte))
-                    if logs: logs(f"🎞️ Generando vertical: parte {i+1}")
-                    tmp_out = os.path.join(video_dir, f"{base_name}_parte_{i+1:03d}_tmp.mp4")
+                    if logs: logs(f"Generando vertical: parte {i+1}")
+                    tmp_out = os.path.join(vertical_dir, f"{base_name}_parte_{i+1:03d}_tmp.mp4")
                     cmd = [
                         "ffmpeg", "-y",
                         "-i", video_path,
@@ -113,21 +116,25 @@ def procesar_video(
                     partes_video.append(tmp_out)
                 if logs: logs(f"Vertical TikTok: partes base {len(partes_video)}")
             else:
+                if logs: logs("Dividiendo video en partes...")
+                cortes_dir = os.path.join(base_dir, "cortes")
                 partes_video = dividir_video_ffmpeg(
                     video_path,
                     segundos_por_parte=segundos_por_parte,
-                    out_dir=video_dir,
+                    out_dir=cortes_dir,
                     start_sec=start_sec,
                     end_sec=end_sec,
                     log_fn=logs if logs else None,
                 )
                 if logs: logs(f"Video dividido en {len(partes_video)} fragmentos")
-            if fondo_path and os.path.exists(fondo_path):
-                fondo_dir = os.path.join(video_dir, "background")
+                output_videos = partes_video
+
+            if fondo_path and os.path.exists(fondo_path) and partes_video:
+                fondo_dir = os.path.join(os.path.dirname(partes_video[0]), "background")
                 os.makedirs(fondo_dir, exist_ok=True)
                 for parte in partes_video:
                     if stop_control.should_stop():
-                        if logs: logs("⛔ Proceso detenido por el usuario.")
+                        if logs: logs("Proceso detenido por el usuario.")
                         return
                     nombre = os.path.splitext(os.path.basename(parte))[0]
                     out_path = os.path.join(fondo_dir, f"{nombre}_bg.mp4")
@@ -139,23 +146,16 @@ def procesar_video(
                         fg_scale=fondo_escala,
                         log_fn=logs if logs else None
                     )
+
             if vertical_tiktok and partes_video:
-                vertical_dir = os.path.join(video_dir, "vertical")
-                if os.path.exists(vertical_dir):
-                    idx = 2
-                    while True:
-                        candidate = os.path.join(video_dir, f"vertical_{idx:02d}")
-                        if not os.path.exists(candidate):
-                            vertical_dir = candidate
-                            break
-                        idx += 1
-                os.makedirs(vertical_dir, exist_ok=True)
                 for idx, parte in enumerate(partes_video):
                     if stop_control.should_stop():
-                        if logs: logs("⛔ Proceso detenido por el usuario.")
+                        if logs: logs("Proceso detenido por el usuario.")
                         return
                     nombre = os.path.splitext(os.path.basename(parte))[0]
-                    out_path = os.path.join(vertical_dir, f"{nombre}_vertical.mp4")
+                    if nombre.endswith("_tmp"):
+                        nombre = nombre[:-4]
+                    out_path = os.path.join(os.path.dirname(parte), f"{nombre}_vertical.mp4")
                     orden_actual = vertical_orden
                     if vertical_orden == "ALT":
                         orden_actual = "LR" if (idx % 2 == 0) else "RL"
@@ -167,20 +167,23 @@ def procesar_video(
                         recorte_bottom=recorte_bottom,
                         log_fn=logs if logs else None
                     )
+                    output_videos.append(out_path)
                     if os.path.basename(parte).endswith("_tmp.mp4"):
                         try:
                             os.remove(parte)
                         except Exception:
                             pass
                 if fondo_path and os.path.exists(fondo_path):
-                    vertical_bg_dir = os.path.join(vertical_dir, "background")
+                    vertical_bg_dir = os.path.join(os.path.dirname(partes_video[0]), "background")
                     os.makedirs(vertical_bg_dir, exist_ok=True)
                     for parte in partes_video:
                         if stop_control.should_stop():
-                            if logs: logs("⛔ Proceso detenido por el usuario.")
+                            if logs: logs("Proceso detenido por el usuario.")
                             return
                         nombre = os.path.splitext(os.path.basename(parte))[0]
-                        in_path = os.path.join(vertical_dir, f"{nombre}_vertical.mp4")
+                        if nombre.endswith("_tmp"):
+                            nombre = nombre[:-4]
+                        in_path = os.path.join(os.path.dirname(parte), f"{nombre}_vertical.mp4")
                         out_path = os.path.join(vertical_bg_dir, f"{nombre}_vertical_bg.mp4")
                         aplicar_fondo_imagen(
                             in_path,
@@ -192,11 +195,14 @@ def procesar_video(
                             log_fn=logs if logs else None
                         )
 
+        elif not es_audio:
+            output_videos = [video_path]
+
         partes_audio = []
         if not solo_video:
             # 3. Dividir audio en MP3
             if logs: logs("Dividiendo audio en partes...")
-            audio_dir = f"output/audios/{base_name}"
+            audio_dir = os.path.join(base_dir, "audios")
             partes_audio = dividir_audio_ffmpeg(
                 audio_path,
                 segundos_por_parte=segundos_por_parte,
@@ -209,11 +215,11 @@ def procesar_video(
 
             # 4. Subtitulos (SRT)
             if generar_srt and partes_audio:
-                subs_dir = f"output/subtitulos/{base_name}"
+                subs_dir = os.path.join(base_dir, "subtitulos")
                 for idx, parte in enumerate(partes_audio, start=1):
-                    if logs: logs(f"📝 Generando SRT {idx}/{len(partes_audio)}...")
+                    if logs: logs(f"Generando SRT {idx}/{len(partes_audio)}...")
                     srt_path = transcribir_srt(parte, subs_dir, idioma="es", model_size="base")
-                    if logs: logs(f"✅ SRT listo: {srt_path}")
+                    if logs: logs(f"SRT listo: {srt_path}")
 
         # 5. Guardar resumen
         resumen_path = guardar_resumen_rango(
@@ -231,6 +237,13 @@ def procesar_video(
             for idx, _parte in enumerate(partes_audio, start=1):
                 if logs: logs(f"Parte {idx}/{len(partes_audio)} lista (sin transcripcion).")
                 if barra: barra.set(idx / len(partes_audio))
+
+        return {
+            "videos": output_videos,
+            "base_dir": base_dir,
+            "cortes_dir": cortes_dir,
+            "vertical_dir": vertical_dir,
+        }
 
     except Exception as e:
         if logs: logs(f"Error: {e}")
@@ -265,7 +278,10 @@ def procesar_corte_individual(
     """
     try:
         if logs: logs("Iniciando corte individual...")
-        base_name = nombre_base_fuente(video_path)
+        base_dir = output_base_dir(video_path)
+        output_videos = []
+        cortes_dir = None
+        vertical_dir = None
         segundos_por_parte = max(1.0, float(minutos_por_parte) * 60)
         start_sec = float(inicio_min) * 60 if inicio_min is not None else 0.0
         end_sec = float(fin_min) * 60 if fin_min is not None else None
@@ -273,11 +289,11 @@ def procesar_corte_individual(
             if logs: logs("Rango invalido: el minuto final debe ser mayor al inicial.")
             return
 
-        out_dir = os.path.join("output", "videos", base_name, "individual")
+        vertical_dir = next_correlative_dir(base_dir, "verticales", "vertical-individual")
         partes = dividir_video_vertical_individual(
             video_path,
             segundos_por_parte=segundos_por_parte,
-            out_dir=out_dir,
+            out_dir=vertical_dir,
             posicion=posicion,
             zoom=zoom,
             bg_color=bg_color,
@@ -295,6 +311,13 @@ def procesar_corte_individual(
             log_fn=logs if logs else None,
         )
         if logs: logs(f"Corte individual generado: {len(partes)} partes")
+        output_videos = partes
+        return {
+            "videos": output_videos,
+            "base_dir": base_dir,
+            "cortes_dir": cortes_dir,
+            "vertical_dir": vertical_dir,
+        }
     except Exception as e:
         if logs: logs(f"Error: {e}")
         raise e
@@ -316,18 +339,19 @@ def procesar_srt(
     """
     try:
         if logs: logs("Iniciando generacion de SRT...")
-        base_name = nombre_base_fuente(path)
+        file_base = os.path.splitext(os.path.basename(path))[0]
+        base_dir = output_base_dir(path)
         if es_audio:
             audio_path = path
             if logs: logs(f"Audio seleccionado: {path}")
         else:
             if logs: logs(f"Video seleccionado: {path}")
-            audio_dir_base = os.path.join("output", "audios", base_name)
+            audio_dir_base = os.path.join(base_dir, "audios")
             os.makedirs(audio_dir_base, exist_ok=True)
-            audio_path = os.path.join(audio_dir_base, f"{base_name}_srt_source.mp3")
+            audio_path = os.path.join(audio_dir_base, f"{file_base}_srt_source.mp3")
             if logs: logs("Extrayendo audio para SRT...")
             extraer_audio(path, audio_path, logs if logs else None)
-        subs_dir = os.path.join("output", "subtitulos", base_name)
+        subs_dir = os.path.join(base_dir, "subtitulos")
         dur = obtener_duracion_segundos(audio_path)
         if dur > 300:
             partes = 6
@@ -338,7 +362,7 @@ def procesar_srt(
             offset = 0.0
             for idx, parte in enumerate(partes_paths, start=1):
                 if stop_control.should_stop():
-                    if logs: logs("⛔ Proceso detenido por el usuario.")
+                    if logs: logs("Proceso detenido por el usuario.")
                     return
                 if logs: logs(f"Transcribiendo parte {idx}/{len(partes_paths)}...")
                 srt_p = transcribir_srt(
@@ -355,12 +379,13 @@ def procesar_srt(
                     offset += obtener_duracion_segundos(parte)
                 except Exception:
                     pass
-            out_path = os.path.join(subs_dir, f"{base_name}_completo.srt")
+            out_path = os.path.join(subs_dir, f"{file_base}_completo.srt")
             combinar_srt_partes(srt_parts, offsets, out_path, log_fn=logs if logs else None)
             if logs: logs(f"SRT final listo: {out_path}")
+            return out_path
         else:
             if stop_control.should_stop():
-                if logs: logs("⛔ Proceso detenido por el usuario.")
+                if logs: logs("Proceso detenido por el usuario.")
                 return
             if logs: logs("Transcribiendo...")
             srt_path = transcribir_srt(
@@ -372,6 +397,7 @@ def procesar_srt(
                 beam_size=beam_size
             )
             if logs: logs(f"SRT listo: {srt_path}")
+            return srt_path
     except Exception as e:
         if logs: logs(f"Error: {e}")
         raise e
@@ -391,7 +417,8 @@ def procesar_quemar_srt(
     logs=None,
 ):
     """
-    Quema un .srt en un video y guarda en output/videos/<base>/subtitulados.
+    Quema un .srt en un video y guarda en output/<base>/subtitulados
+    o en el mismo folder si viene de verticales.
     """
     try:
         if logs: logs("Iniciando quemado de SRT...")
@@ -410,9 +437,10 @@ def procesar_quemar_srt(
                 logs(f"Primer tiempo SRT: {m.group(1)} -> {m.group(2)}")
         except Exception:
             pass
-        base_name = nombre_base_fuente(video_path)
-        out_dir = os.path.join("output", "videos", base_name, "subtitulados")
-        out_path = os.path.join(out_dir, f"{base_name}_subt.mp4")
+        out_dir = output_subtitulados_dir(video_path)
+        os.makedirs(out_dir, exist_ok=True)
+        file_base = os.path.splitext(os.path.basename(video_path))[0]
+        out_path = os.path.join(out_dir, f"{file_base}_subt.mp4")
         quemar_srt_en_video(
             video_path,
             srt_path,

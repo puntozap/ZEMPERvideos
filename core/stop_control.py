@@ -29,7 +29,7 @@ def request_stop(log_fn=None, clear_busy: bool = True):
     if clear_busy:
         _busy_event.clear()
     if log_fn:
-        log_fn("🛑 Stop solicitado. Deteniendo procesos...")
+        log_fn("Stop solicitado. Deteniendo procesos...")
     _kill_process("ffmpeg.exe", log_fn)
     _kill_process("ffprobe.exe", log_fn)
     _kill_process("yt-dlp.exe", log_fn)
@@ -43,6 +43,6 @@ def _kill_process(name: str, log_fn=None):
             text=True
         )
         if log_fn:
-            log_fn(f"🧯 Finalizando {name}...")
+            log_fn(f"Finalizando {name}...")
     except Exception:
         pass

@@ -42,10 +42,13 @@ OPENAI_API_KEY=tu_token
 
 ## Salidas
 Todo se guarda dentro de `output/`:
-- `output/videos/` cortes, verticales y subtitulados
-- `output/audios/` mp3
-- `output/subtitulos/` srt
-- `output/downloads/` YouTube
+- `output/{base}/cortes/` cortes normales
+- `output/{base}/verticales/vertical-corte_###/` cortes verticales (corridas)
+- `output/{base}/verticales/vertical-individual_###/` cortes verticales individuales (corridas)
+- `output/{base}/audios/` mp3
+- `output/{base}/subtitulos/` srt
+- `output/{base}/subtitulados/` videos subtitulados (si no vienen de verticales)
+- `output/{base}/download/` descargas de YouTube
 
 ## Notas
 - Los videos se nombran con el nombre original y parte: `Nombre_parte_001.mp4`.
@@ -56,5 +59,3 @@ Todo se guarda dentro de `output/`:
 - Si no genera SRT, revisa que el audio tenga contenido.
 
 ---
-
-

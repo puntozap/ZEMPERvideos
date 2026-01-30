@@ -2,9 +2,11 @@
 import sys
 import subprocess
 import time
+import shutil
 import yt_dlp
 from yt_dlp.utils import DownloadError
 from core import stop_control
+from core.utils import output_base_dir
 
 def _actualizar_yt_dlp(log_fn=None):
     if log_fn:
@@ -108,7 +110,7 @@ def _descargar_youtube(
 
 def descargar_audio_youtube(
     url: str,
-    output_dir: str = os.path.join("output", "downloads"),
+    output_dir: str = os.path.join("output", "_downloads_tmp"),
     retry_update: bool = True,
     retry_android: bool = True,
     player_client: str | None = None,
@@ -147,11 +149,19 @@ def descargar_audio_youtube(
         log_fn=log_fn
     )
     archivo_mp3 = os.path.splitext(archivo_salida)[0] + ".mp3"
-    return archivo_mp3
+    base_dir = output_base_dir(archivo_mp3)
+    final_dir = os.path.join(base_dir, "download")
+    os.makedirs(final_dir, exist_ok=True)
+    final_path = os.path.join(final_dir, os.path.basename(archivo_mp3))
+    try:
+        shutil.move(archivo_mp3, final_path)
+    except Exception:
+        final_path = archivo_mp3
+    return final_path
 
 def descargar_video_youtube_mp4(
     url: str,
-    output_dir: str = os.path.join("output", "downloads"),
+    output_dir: str = os.path.join("output", "_downloads_tmp"),
     retry_update: bool = True,
     retry_android: bool = True,
     player_client: str | None = None,
@@ -183,5 +193,14 @@ def descargar_video_youtube_mp4(
         log_fn=log_fn
     )
     base, _ext = os.path.splitext(archivo_salida)
-    return base + ".mp4"
+    archivo_mp4 = base + ".mp4"
+    base_dir = output_base_dir(archivo_mp4)
+    final_dir = os.path.join(base_dir, "download")
+    os.makedirs(final_dir, exist_ok=True)
+    final_path = os.path.join(final_dir, os.path.basename(archivo_mp4))
+    try:
+        shutil.move(archivo_mp4, final_path)
+    except Exception:
+        final_path = archivo_mp4
+    return final_path
 

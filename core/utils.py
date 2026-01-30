@@ -3,6 +3,8 @@ import subprocess
 import re
 import math
 import tempfile
+import threading
+import time
 from datetime import datetime
 from core import stop_control
 
@@ -10,7 +12,7 @@ def asegurar_dir(path: str):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def nombre_salida_por_video(video_path: str, base_dir="output/transcripciones", parte=None) -> str:
+def nombre_salida_por_video(video_path: str, base_dir=None, parte=None) -> str:
     """
     Genera un nombre de archivo vÃ¡lido en Windows a partir de un path o URL de video.
     Si es un enlace de YouTube, se usa el ID del video.
@@ -26,6 +28,9 @@ def nombre_salida_por_video(video_path: str, base_dir="output/transcripciones", 
 
     # Limpiar caracteres invÃ¡lidos para Windows
     base_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
+
+    if base_dir is None:
+        base_dir = os.path.join(output_base_dir(video_path), "transcripciones")
 
     # Agregar extensiÃ³n .txt
     if parte:
@@ -48,6 +53,71 @@ def nombre_base_fuente(video_path: str) -> str:
     base_name = os.path.splitext(base_name)[0]
     base_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
     return base_name
+
+def nombre_base_principal(video_path: str) -> str:
+    """
+    Obtiene un nombre base principal (sin extensiÃ³n, sin sufijos de partes/vertical).
+    """
+    base_name = os.path.basename(video_path)
+    if "youtube.com" in video_path or "youtu.be" in video_path:
+        match = re.search(r"(?:v=|youtu\.be/)([\w-]{11})", video_path)
+        if match:
+            base_name = match.group(1)
+    base_name = os.path.splitext(base_name)[0]
+    base_name = re.sub(r'[<>:"/\\|?*]', "_", base_name)
+    base_name = base_name.strip()
+
+    def _strip_suffixes(name: str) -> str:
+        prev = None
+        while prev != name:
+            prev = name
+            name = re.sub(r"([ _-]*(parte|part)[ _-]*\d+)$", "", name, flags=re.IGNORECASE).strip()
+            name = re.sub(r"([ _-]*(srt[_-]*source|srt|subt|sub|tmp|vertical|vert|completo|original))$", "", name, flags=re.IGNORECASE).strip()
+        return name
+
+    base_name = _strip_suffixes(base_name)
+    return base_name or "video"
+
+def output_base_dir(video_path: str) -> str:
+    """
+    Carpeta base para todos los outputs de un video.
+    """
+    return os.path.join("output", nombre_base_principal(video_path))
+
+def output_subdir(video_path: str, subdir: str) -> str:
+    return os.path.join(output_base_dir(video_path), subdir)
+
+def next_correlative_dir(base_dir: str, subdir: str, prefix: str) -> str:
+    """
+    Devuelve un subdirectorio correlativo dentro de base_dir/subdir con prefijo.
+    Ej: output/<base>/verticales/corte_001
+    """
+    root = os.path.join(base_dir, subdir)
+    os.makedirs(root, exist_ok=True)
+    max_idx = 0
+    for name in os.listdir(root):
+        if not os.path.isdir(os.path.join(root, name)):
+            continue
+        m = re.match(rf"^{re.escape(prefix)}_(\d+)$", name)
+        if m:
+            try:
+                max_idx = max(max_idx, int(m.group(1)))
+            except Exception:
+                pass
+    next_idx = max_idx + 1
+    folder = os.path.join(root, f"{prefix}_{next_idx:03d}")
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+def output_subtitulados_dir(video_path: str) -> str:
+    """
+    Si el video viene de verticales, se guarda en el mismo folder.
+    Si no, se guarda en output/<base>/subtitulados.
+    """
+    norm = os.path.normpath(video_path)
+    if f"{os.sep}verticales{os.sep}" in norm:
+        return os.path.dirname(video_path)
+    return output_subdir(video_path, "subtitulados")
 
 def obtener_duracion_segundos(path: str) -> float:
     cmd = [
@@ -135,8 +205,8 @@ def crear_outro_tiktok(
             "x=(w-text_w)/2:y=(h-text_h)/2"
         )
     filtro = (
-        "scale=1080:1920:force_original_aspect_ratio=increase,"
-        "crop=1080:1920"
+        "scale=720:1280:force_original_aspect_ratio=increase,"
+        "crop=720:1280"
         f"{draw}"
     )
     cmd = [
@@ -173,7 +243,7 @@ def dividir_video_ffmpeg(
     Divide un video en partes de N segundos. Guarda MP4s en out_dir.
     """
     asegurar_dir(out_dir)
-    base_name = nombre_base_fuente(video_path)
+    base_name = nombre_base_principal(video_path)
     duracion = obtener_duracion_segundos(video_path)
     start_sec = max(0.0, float(start_sec))
     if end_sec is None:
@@ -192,7 +262,7 @@ def dividir_video_ffmpeg(
     for i in range(total_partes):
         if stop_control.should_stop():
             if log_fn:
-                log_fn("⛔ Proceso detenido por el usuario.")
+                log_fn("Proceso detenido por el usuario.")
             break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
@@ -247,7 +317,7 @@ def dividir_video_vertical_individual(
     posicion: C (centro), L (izquierda), R (derecha)
     """
     asegurar_dir(out_dir)
-    base_name = nombre_base_fuente(video_path)
+    base_name = nombre_base_principal(video_path)
     duracion = obtener_duracion_segundos(video_path)
     start_sec = max(0.0, float(start_sec))
     if end_sec is None:
@@ -268,7 +338,7 @@ def dividir_video_vertical_individual(
     if pos == "L":
         x_expr = "0"
     elif pos == "R":
-        x_expr = "iw-1080"
+        x_expr = "iw-720"
     else:
         x_expr = "(iw-1080)/2"
 
@@ -283,8 +353,8 @@ def dividir_video_vertical_individual(
     if color.startswith("#") and len(color) == 7:
         color = "0x" + color[1:]
 
-    target_w = 1080
-    target_h = 1920
+    target_w = 720
+    target_h = 1280
     scaled_h = max(2, int(target_h * zoom))
     if scaled_h % 2 != 0:
         scaled_h += 1
@@ -322,7 +392,7 @@ def dividir_video_vertical_individual(
     for i in range(total_partes):
         if stop_control.should_stop():
             if log_fn:
-                log_fn("⛔ Proceso detenido por el usuario.")
+                log_fn("Proceso detenido por el usuario.")
             break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
@@ -346,12 +416,85 @@ def dividir_video_vertical_individual(
             "-c:v", "libx264",
             "-c:a", "aac",
             "-movflags", "+faststart",
+            "-progress", "pipe:1",
+            "-stats_period", "5",
             temp_path
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
+        progress = {"sec": 0.0}
+
+        def _read_stdout():
+            if not proc.stdout:
+                return
+            for raw in proc.stdout:
+                line = raw.strip()
+                if line.startswith("out_time_ms="):
+                    try:
+                        ms = int(line.split("=", 1)[1].strip())
+                        progress["sec"] = ms / 1_000_000.0
+                    except Exception:
+                        continue
+
+        def _read_stderr():
+            if not proc.stderr:
+                return
+            for raw in proc.stderr:
+                line = raw.strip()
+                if "time=" in line:
+                    import re as _re
+                    m = _re.search(r"time=([0-9:.]+)", line)
+                    if not m:
+                        continue
+                    t = m.group(1)
+                    try:
+                        parts = t.split(":")
+                        if len(parts) == 3:
+                            h, m_, s = parts
+                            sec = float(s) + int(m_) * 60 + int(h) * 3600
+                        elif len(parts) == 2:
+                            m_, s = parts
+                            sec = float(s) + int(m_) * 60
+                        else:
+                            sec = float(parts[0])
+                        progress["sec"] = sec
+                    except Exception:
+                        continue
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        t_out = threading.Thread(target=_read_stdout, daemon=True)
+        t_err = threading.Thread(target=_read_stderr, daemon=True)
+        t_out.start()
+        t_err.start()
+
+        last_log_time = 0.0
+        last_percent = -1
+        while proc.poll() is None:
+            now = time.time()
+            if log_fn and progress["sec"] > 0 and (now - last_log_time >= 5):
+                pct = int(min(100.0, (progress["sec"] / duracion_parte) * 100.0))
+                if pct != last_percent:
+                    log_fn(f"Progreso parte {i+1}/{total_partes}: {pct}%")
+                    last_percent = pct
+                    last_log_time = now
+            time.sleep(0.2)
+
+        result_code = proc.wait()
+        if stop_control.should_stop():
             if log_fn:
-                err = (result.stderr or "").strip()
+                log_fn("Proceso detenido por el usuario.")
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+            break
+        if result_code != 0:
+            if log_fn:
+                err = ""
+                try:
+                    if proc.stderr:
+                        err = (proc.stderr.read() or "").strip()
+                except Exception:
+                    err = ""
                 log_fn(f"Error ffmpeg en parte {i+1}: {err[-400:]}")
             try:
                 if os.path.exists(out_path):
@@ -391,8 +534,8 @@ def dividir_video_vertical_individual(
                 if log_fn:
                     log_fn("🎬 Generando video final con tarjeta...")
                 outro_filter = (
-                    "scale=1080:1920:force_original_aspect_ratio=increase,"
-                    "crop=1080:1920"
+                    "scale=720:1280:force_original_aspect_ratio=increase,"
+                    "crop=720:1280"
                     f"{draw}"
                 )
                 total_dur = float(duracion_parte) + float(outro_seconds)
@@ -526,7 +669,7 @@ def dividir_audio_ffmpeg(
     for i in range(total_partes):
         if stop_control.should_stop():
             if log_fn:
-                log_fn("⛔ Proceso detenido por el usuario.")
+                log_fn("Proceso detenido por el usuario.")
             break
         inicio = start_sec + i * segundos_por_parte
         if inicio >= end_sec:
@@ -578,7 +721,7 @@ def dividir_audio_ffmpeg_partes(audio_path: str, partes: int = 5, log_fn=None):
     for i in range(partes):
         if stop_control.should_stop():
             if log_fn:
-                log_fn("⛔ Proceso detenido por el usuario.")
+                log_fn("Proceso detenido por el usuario.")
             break
         inicio = i * duracion_segmento
         out_path = f"{base}_parte{i+1}.mp3"
@@ -684,8 +827,10 @@ def guardar_resumen_rango(
     inicio_min: float | None,
     fin_min: float | None,
     partes_generadas: int,
-    out_dir: str = "output/resumenes"
+    out_dir: str | None = None
 ) -> str:
+    if out_dir is None:
+        out_dir = os.path.join(output_base_dir(video_path), "resumenes")
     asegurar_dir(out_dir)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     inicio_txt = "0.0" if inicio_min is None else str(inicio_min)
