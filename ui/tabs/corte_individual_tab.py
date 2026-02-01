@@ -1,8 +1,10 @@
 import os
 import threading
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import colorchooser
 
+from core.ai_youtube import subir_video_youtube_desde_ia
 from core.workflow import procesar_corte_individual, procesar_srt, procesar_quemar_srt
 from core.utils import obtener_duracion_segundos, output_base_dir
 from ui.shared import helpers
@@ -518,6 +520,145 @@ def create_tab(parent, context):
         variable=procesar_todo_var,
     )
     chk_procesar_todo.grid(row=20, column=0, sticky="w", padx=16, pady=(0, 8))
+
+    auto_subs_ind_var = tk.BooleanVar(value=True)
+    auto_frame = ctk.CTkFrame(ind_card, fg_color="transparent")
+    auto_frame.grid(row=20, column=0, sticky="ew", padx=16, pady=(0, 8))
+    auto_frame.grid_columnconfigure(1, weight=1)
+    lbl_auto_ind = ctk.CTkLabel(
+        auto_frame,
+        text="Agregar todo y subir a YouTube (privado)",
+        font=ctk.CTkFont(size=12, weight="bold"),
+    )
+    lbl_auto_ind.grid(row=0, column=0, sticky="w", columnspan=2)
+    switch_auto_ind = ctk.CTkSwitch(
+        auto_frame,
+        text="Con subtítulos",
+        variable=auto_subs_ind_var,
+    )
+    switch_auto_ind.grid(row=1, column=0, sticky="w", pady=(4, 0))
+    btn_auto_ind = ctk.CTkButton(
+        auto_frame,
+        text="Agregar todo y subir",
+        command=lambda: agregar_todo_youtube_individual(),
+        height=40,
+    )
+    btn_auto_ind.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
+    def agregar_todo_youtube_individual():
+        if not estado["path"]:
+            log("Selecciona un video primero.")
+            return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
+        helpers.log_seccion(log, None, "Agregar todo YouTube")
+        minutos = leer_minutos_ind()
+        inicio_min, fin_min = leer_rango_minutos_ind()
+        posicion = pos_var.get()
+        try:
+            zoom = float(entry_zoom.get().strip().replace(",", "."))
+        except Exception:
+            zoom = slider_zoom.get()
+        color = entry_color.get().strip() or "#000000"
+        motion = motion_var.get()
+        try:
+            motion_amount = float(entry_motion.get().strip().replace(",", "."))
+        except Exception:
+            motion_amount = 0.08
+        try:
+            motion_period = float(entry_motion_period.get().strip().replace(",", "."))
+        except Exception:
+            motion_period = 30.0
+        outro_enabled = outro_var.get()
+        outro_image = outro_state.get("image")
+        outro_text = entry_outro_text.get().strip()
+        try:
+            outro_seconds = float(entry_outro_secs.get().strip().replace(",", "."))
+        except Exception:
+            outro_seconds = 3.0
+        try:
+            outro_font = int(entry_outro_font.get().strip())
+        except Exception:
+            outro_font = 54
+        outro_color = entry_outro_color.get().strip() or "#FFFFFF"
+
+        def run_auto_ind():
+            try:
+                result = procesar_corte_individual(
+                    estado["path"],
+                    minutos,
+                    inicio_min,
+                    fin_min,
+                    posicion,
+                    zoom,
+                    color,
+                    motion,
+                    motion_amount,
+                    motion_period,
+                    outro_enabled,
+                    outro_image,
+                    outro_text,
+                    outro_seconds,
+                    outro_font,
+                    outro_color,
+                    None,
+                    log,
+                )
+                videos = []
+                if isinstance(result, dict):
+                    videos = result.get("videos") or []
+                elif isinstance(result, list):
+                    videos = result
+                if not videos:
+                    log("No se generaron videos para subir.")
+                    return
+                if auto_subs_ind_var.get():
+                    idioma = idioma_var.get()
+                    if idioma == "auto":
+                        idioma = ""
+                    modelo = modelo_var.get()
+                    for idx, video in enumerate(videos, start=1):
+                        if stop_control.should_stop():
+                            log("Proceso detenido por el usuario.")
+                            return
+                        log(f"Generando SRT ({idx}/{len(videos)})...")
+                        srt_path = procesar_srt(
+                            video,
+                            False,
+                            idioma,
+                            modelo,
+                            None,
+                            None,
+                            log,
+                        )
+                        if srt_path:
+                            log(f"SRT generado: {srt_path}")
+                for idx, video_path in enumerate(videos, start=1):
+                    if stop_control.should_stop():
+                        log("Proceso detenido por el usuario.")
+                        return
+                    helpers.log_seccion(log, None, "YouTube automático")
+                    log(f"Subiendo {idx}/{len(videos)}: {video_path}")
+                    subir_video_youtube_desde_ia(
+                        video_path,
+                        None,
+                        model="gpt-4o-mini",
+                        idioma="es",
+                        privacy="private",
+                        log_fn=log,
+                    )
+                    log(f"Miniatura oculta ID subida: {idx}/{len(videos)}")
+                log("Todos los videos se subieron como ocultos.")
+            except Exception as exc:
+                helpers.log_seccion(log, None, "Error YouTube")
+                log(f"Error automático YouTube: {exc}")
+            finally:
+                stop_control.set_busy(False)
+
+        threading.Thread(target=run_auto_ind, daemon=True).start()
 
     srt_row = ctk.CTkFrame(ind_card, fg_color="transparent")
     srt_row.grid(row=21, column=0, sticky="ew", padx=16, pady=(0, 8))

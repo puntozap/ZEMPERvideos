@@ -14,7 +14,7 @@ from ui.tabs import (
     audio_tab,
     youtube_mp3_tab,
     youtube_mp4_tab,
-    tiktok_upload_tab,
+    youtube_upload_tab,
     actividad_tab,
 )
 
@@ -27,7 +27,6 @@ def iniciar_app(procesar_video_fn):
     ventana.title("Transcriptor de Video")
     ventana.geometry("980x680")
     ventana.minsize(820, 600)
-    ventana.state("zoomed")
 
     root = ctk.CTkFrame(master=ventana, corner_radius=14)
     root.pack(fill="both", expand=True, padx=24, pady=24)
@@ -42,6 +41,7 @@ def iniciar_app(procesar_video_fn):
     srt_state = shared_state["srt_state"]
     sub_state = shared_state["sub_state"]
     ai_state = shared_state["ai_state"]
+    youtube_state = shared_state["youtube_state"]
     stop_control = shared_state["stop_control"]
 
     def log(msg):
@@ -114,14 +114,14 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Subtitulos")
     tabs.add("IA generadores")
     tabs.add("Descargas")
-    tabs.add("TikTok")
+    tabs.add("YouTube")
     tabs.add("Actividad")
 
     tab_corte_main = tabs.tab("Corte")
     tab_sub_main = tabs.tab("Subtitulos")
     tab_ia_main = tabs.tab("IA generadores")
     tab_desc_main = tabs.tab("Descargas")
-    tab_tiktok_main = tabs.tab("TikTok")
+    tab_youtube_main = tabs.tab("YouTube")
     tab_act = tabs.tab("Actividad")
 
     corte_tabs = ctk.CTkTabview(tab_corte_main, corner_radius=10)
@@ -274,13 +274,11 @@ def iniciar_app(procesar_video_fn):
         "abrir_descargas": abrir_descargas,
     })
 
-    tiktok_upload_tab.create_tab(tab_tiktok_main, {
+    youtube_upload_tab.create_tab(tab_youtube_main, {
         "log": log,
         "log_global": log,
-        "alerta_busy": alerta_busy,
         "stop_control": stop_control,
-        "beep_fin": beep_fin,
-        "renombrar_si_largo": renombrar_si_largo,
+        "youtube_state": youtube_state,
     })
 
     actividad_tab.create_tab(tab_act, {
@@ -295,6 +293,7 @@ def iniciar_app(procesar_video_fn):
     actualizar_etiquetas_rango()
     actualizar_etiquetas_rango_ind()
     ventana.after(150, lambda: getattr(corte_scroll, "_parent_canvas", None) and corte_scroll._parent_canvas.yview_moveto(0))
+    ventana.after_idle(lambda: ventana.state("zoomed"))
 
     return ventana, None, log, None
 

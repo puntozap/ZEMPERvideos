@@ -3,6 +3,7 @@ import threading
 import customtkinter as ctk
 import tkinter as tk
 
+from core.ai_youtube import subir_video_youtube_desde_ia
 from core.utils import obtener_duracion_segundos, output_base_dir
 from core.workflow import procesar_srt, procesar_quemar_srt
 from ui.shared.preview import SimpleVideoPlayer
@@ -44,9 +45,7 @@ def create_tab(parent, context):
     def leer_rango_minutos():
         if rango["duracion"] <= 0:
             return None, None
-        inicio = slider_inicio.get()
-        fin = slider_fin.get()
-        return inicio / 60.0, fin / 60.0
+        return rango["inicio"] / 60.0, rango["fin"] / 60.0
 
     def iniciar_proceso():
         if not estado["path"]:
@@ -136,6 +135,88 @@ def create_tab(parent, context):
 
         threading.Thread(target=run_corte, daemon=True).start()
 
+    def agregar_todo_youtube():
+        if not estado["path"]:
+            log("Selecciona un video primero.")
+            return
+        if stop_control.is_busy():
+            alerta_busy()
+            return
+        stop_control.clear_stop()
+        stop_control.set_busy(True)
+        helpers.log_seccion(log, None, "Agregar todo YouTube")
+        minutos = leer_minutos()
+        inicio_min, fin_min = leer_rango_minutos()
+        recorte_total = 0.12
+        try:
+            recorte_total = float(entry_recorte_total.get().strip().replace(",", "."))
+        except Exception:
+            recorte_total = 0.12
+        recorte_top = recorte_total
+        recorte_bottom = recorte_total
+        fondo_path = estado["fondo_path"] if fondo_var.get() else None
+        fondo_estilo = fondo_estilo_var.get().lower()
+        try:
+            fondo_escala = float(entry_fondo_escala.get().strip().replace(",", "."))
+        except Exception:
+            fondo_escala = 0.92
+
+        def run_auto():
+            try:
+                result = procesar_video_fn(
+                    estado["path"],
+                    False,
+                    False,
+                    minutos,
+                    inicio_min,
+                    fin_min,
+                    True,
+                    vertical_var.get(),
+                    orden_var.get(),
+                    recorte_top,
+                    recorte_bottom,
+                    False,
+                    fondo_path,
+                    fondo_estilo,
+                    fondo_escala,
+                    auto_subs_var.get(),
+                )
+                videos = []
+                if isinstance(result, dict):
+                    videos = result.get("videos") or []
+                elif isinstance(result, list):
+                    videos = result
+                if not videos:
+                    log("No se generaron videos para subir.")
+                    return
+                for idx, video_path in enumerate(videos, start=1):
+                    if stop_control.should_stop():
+                        log("Proceso detenido por el usuario.")
+                        return
+                    helpers.log_seccion(log, None, "YouTube automático")
+                    log(f"Subiendo {idx}/{len(videos)}: {video_path}")
+                    subir_video_youtube_desde_ia(
+                        video_path,
+                        None,
+                        model="gpt-4o-mini",
+                        idioma="es",
+                        privacy="private",
+                        log_fn=log,
+                    )
+                    log(f"Video {idx}/{len(videos)} subido en privado.")
+                log("Todos los videos se subieron como ocultos.")
+            except Exception as exc:
+                helpers.log_seccion(log, None, "Error YouTube")
+                log(f"Error automático YouTube: {exc}")
+            finally:
+                stop_control.set_busy(False)
+
+        threading.Thread(target=run_auto, daemon=True).start()
+
+    slider_programmatic = False
+    ENTRY_ERROR_BORDER = "#ff6b6b"
+    ENTRY_DEFAULT_BORDER = None
+
     def format_time(seconds):
         seconds = max(0, float(seconds))
         h = int(seconds // 3600)
@@ -145,33 +226,53 @@ def create_tab(parent, context):
             return f"{h:02d}:{m:02d}:{s:02d}"
         return f"{m:02d}:{s:02d}"
 
+    def format_entry_time(seconds):
+        seconds = max(0, float(seconds))
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes:02d}:{secs:02d}"
+
+    def parse_entry_time(value: str):
+        text = (value or "").strip()
+        if not text:
+            raise ValueError("Formato mm:ss")
+        if ":" not in text:
+            raise ValueError("Formato mm:ss")
+        parts = text.split(":")
+        if len(parts) != 2:
+            raise ValueError("Formato mm:ss")
+        min_part, sec_part = parts
+        try:
+            minutes = int(min_part.strip())
+        except Exception:
+            raise ValueError("Minutos inválidos")
+        try:
+            seconds = float(sec_part.strip().replace(",", "."))
+        except Exception:
+            raise ValueError("Segundos inválidos")
+        if minutes < 0:
+            raise ValueError("Minutos inválidos")
+        if seconds < 0 or seconds >= 60:
+            raise ValueError("Segundos 00-59")
+        return minutes * 60 + seconds
+
     def actualizar_etiquetas_rango():
-        inicio = slider_inicio.get()
-        fin = slider_fin.get()
-        lbl_inicio_val.configure(text=format_time(inicio))
-        lbl_fin_val.configure(text=format_time(fin))
+        lbl_inicio_val.configure(text=format_time(rango["inicio"]))
+        lbl_fin_val.configure(text=format_time(rango["fin"]))
         lbl_duracion_val.configure(text=format_time(rango["duracion"]))
-
-    def on_inicio_change(value):
-        if value > slider_fin.get():
-            slider_fin.set(value)
-        actualizar_etiquetas_rango()
-
-    def on_fin_change(value):
-        if value < slider_inicio.get():
-            slider_inicio.set(value)
-        actualizar_etiquetas_rango()
 
     def set_preview_enabled(enabled: bool):
         estado["es_audio"] = False
         state = "normal" if enabled else "disabled"
         slider_inicio.configure(state=state)
         slider_fin.configure(state=state)
+        entry_inicio.configure(state=state)
+        entry_fin.configure(state=state)
+        clear_feedback()
         if not enabled:
-            slider_inicio.set(0)
-            slider_fin.set(0)
             rango["duracion"] = 0.0
-            actualizar_etiquetas_rango()
+            set_range_seconds(0, 0)
+            clear_feedback()
             try:
                 video_player.stop()
             except Exception:
@@ -187,9 +288,7 @@ def create_tab(parent, context):
         rango["duracion"] = max(0.0, duracion)
         slider_inicio.configure(from_=0, to=rango["duracion"])
         slider_fin.configure(from_=0, to=rango["duracion"])
-        slider_inicio.set(0)
-        slider_fin.set(rango["duracion"])
-        actualizar_etiquetas_rango()
+        set_range_seconds(0, rango["duracion"])
 
     corte_scroll = ctk.CTkScrollableFrame(left, corner_radius=0)
     corte_scroll.grid(row=0, column=0, sticky="nsew")
@@ -392,6 +491,30 @@ def create_tab(parent, context):
     srt_row.grid(row=4, column=0, sticky="ew", padx=14, pady=(0, 8))
     srt_row.grid_columnconfigure(1, weight=1)
 
+    auto_subs_var = tk.BooleanVar(value=True)
+    auto_frame = ctk.CTkFrame(actions, fg_color="transparent")
+    auto_frame.grid(row=5, column=0, sticky="ew", padx=14, pady=(0, 8))
+    auto_frame.grid_columnconfigure(1, weight=1)
+    lbl_auto = ctk.CTkLabel(
+        auto_frame,
+        text="Agregar todo y subir a YouTube (privado)",
+        font=ctk.CTkFont(size=12, weight="bold"),
+    )
+    lbl_auto.grid(row=0, column=0, sticky="w", columnspan=2)
+    switch_subs = ctk.CTkSwitch(
+        auto_frame,
+        text="Con subtítulos",
+        variable=auto_subs_var,
+    )
+    switch_subs.grid(row=1, column=0, sticky="w", pady=(4, 0))
+    btn_auto_youtube = ctk.CTkButton(
+        auto_frame,
+        text="Agregar todo y subir",
+        command=lambda: agregar_todo_youtube(),
+        height=40,
+    )
+    btn_auto_youtube.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
     lbl_modelo = ctk.CTkLabel(srt_row, text="Modelo SRT", font=ctk.CTkFont(size=12))
     lbl_modelo.grid(row=0, column=0, sticky="w")
 
@@ -457,26 +580,137 @@ def create_tab(parent, context):
     range_card.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
     range_card.grid_columnconfigure(1, weight=1)
 
+    entry_inicio_var = tk.StringVar(value=format_entry_time(rango.get("inicio", 0.0)))
+    entry_fin_var = tk.StringVar(value=format_entry_time(rango.get("fin", 0.0)))
+
     lbl_inicio = ctk.CTkLabel(range_card, text="Inicio", font=ctk.CTkFont(size=12))
     lbl_inicio.grid(row=0, column=0, sticky="w")
+
+    entry_inicio = ctk.CTkEntry(
+        range_card,
+        width=120,
+        textvariable=entry_inicio_var,
+        placeholder_text="mm:ss",
+    )
+    entry_inicio.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+
     lbl_inicio_val = ctk.CTkLabel(range_card, text="00:00", font=ctk.CTkFont(size=12))
     lbl_inicio_val.grid(row=0, column=2, sticky="e")
 
-    slider_inicio = ctk.CTkSlider(range_card, from_=0, to=1, command=on_inicio_change)
+    slider_inicio = ctk.CTkSlider(range_card, from_=0, to=1, command=lambda value: on_slider_change("inicio", value))
     slider_inicio.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 6))
 
     lbl_fin = ctk.CTkLabel(range_card, text="Fin", font=ctk.CTkFont(size=12))
     lbl_fin.grid(row=2, column=0, sticky="w")
+
+    entry_fin = ctk.CTkEntry(
+        range_card,
+        width=120,
+        textvariable=entry_fin_var,
+        placeholder_text="mm:ss",
+    )
+    entry_fin.grid(row=2, column=1, sticky="ew", padx=(6, 0))
+
     lbl_fin_val = ctk.CTkLabel(range_card, text="00:00", font=ctk.CTkFont(size=12))
     lbl_fin_val.grid(row=2, column=2, sticky="e")
 
-    slider_fin = ctk.CTkSlider(range_card, from_=0, to=1, command=on_fin_change)
+    slider_fin = ctk.CTkSlider(range_card, from_=0, to=1, command=lambda value: on_slider_change("fin", value))
     slider_fin.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(0, 6))
 
+    range_feedback_label = ctk.CTkLabel(
+        range_card,
+        text="",
+        font=ctk.CTkFont(size=11),
+        text_color="#ff6b6b",
+    )
+    range_feedback_label.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+
     lbl_duracion = ctk.CTkLabel(range_card, text="Duracion", font=ctk.CTkFont(size=12))
-    lbl_duracion.grid(row=4, column=0, sticky="w")
+    lbl_duracion.grid(row=5, column=0, sticky="w")
     lbl_duracion_val = ctk.CTkLabel(range_card, text="00:00", font=ctk.CTkFont(size=12))
-    lbl_duracion_val.grid(row=4, column=2, sticky="e")
+    lbl_duracion_val.grid(row=5, column=2, sticky="e")
+
+    ENTRY_DEFAULT_BORDER = entry_inicio.cget("border_color")
+
+    def update_entries_from_state():
+        entry_inicio_var.set(format_entry_time(rango["inicio"]))
+        entry_fin_var.set(format_entry_time(rango["fin"]))
+
+    def clear_feedback():
+        if ENTRY_DEFAULT_BORDER is not None:
+            entry_inicio.configure(border_color=ENTRY_DEFAULT_BORDER)
+            entry_fin.configure(border_color=ENTRY_DEFAULT_BORDER)
+        range_feedback_label.configure(text="")
+
+    def mark_entry_invalid(entry_widget, message):
+        entry_widget.configure(border_color=ENTRY_ERROR_BORDER)
+        range_feedback_label.configure(text=message)
+
+    def set_slider_values(start, end):
+        nonlocal slider_programmatic
+        slider_programmatic = True
+        try:
+            slider_inicio.set(start)
+            slider_fin.set(end)
+        finally:
+            slider_programmatic = False
+
+    def sync_state_from_sliders():
+        rango["inicio"] = slider_inicio.get()
+        rango["fin"] = slider_fin.get()
+        actualizar_etiquetas_rango()
+        update_entries_from_state()
+        clear_feedback()
+
+    def set_range_seconds(start, end):
+        max_duration = max(0.0, rango.get("duracion", 0.0))
+        start = max(0.0, min(start, max_duration))
+        end = max(start, min(end, max_duration))
+        rango["inicio"] = start
+        rango["fin"] = end
+        set_slider_values(start, end)
+        actualizar_etiquetas_rango()
+        update_entries_from_state()
+        clear_feedback()
+
+    def on_slider_change(side, _value):
+        if slider_programmatic:
+            return
+        inicio_val = slider_inicio.get()
+        fin_val = slider_fin.get()
+        if side == "inicio" and inicio_val > fin_val:
+            set_slider_values(inicio_val, inicio_val)
+            fin_val = inicio_val
+        elif side == "fin" and fin_val < inicio_val:
+            set_slider_values(fin_val, fin_val)
+            inicio_val = fin_val
+        sync_state_from_sliders()
+
+    def on_entry_commit(side, _event=None):
+        clear_feedback()
+        try:
+            inicio_val = parse_entry_time(entry_inicio_var.get())
+        except ValueError as exc:
+            mark_entry_invalid(entry_inicio, str(exc))
+            return
+        try:
+            fin_val = parse_entry_time(entry_fin_var.get())
+        except ValueError as exc:
+            mark_entry_invalid(entry_fin, str(exc))
+            return
+        if inicio_val >= fin_val:
+            target_entry = entry_inicio if side == "inicio" else entry_fin
+            mark_entry_invalid(target_entry, "Inicio debe ser menor que Fin")
+            return
+        if rango["duracion"] > 0 and fin_val > rango["duracion"]:
+            mark_entry_invalid(entry_fin, "Fin no puede superar la duración total del video")
+            return
+        set_range_seconds(inicio_val, fin_val)
+
+    entry_inicio.bind("<FocusOut>", lambda event: on_entry_commit("inicio"))
+    entry_inicio.bind("<Return>", lambda event: on_entry_commit("inicio"))
+    entry_fin.bind("<FocusOut>", lambda event: on_entry_commit("fin"))
+    entry_fin.bind("<Return>", lambda event: on_entry_commit("fin"))
 
     log_card, _log_widget, log_local = helpers.create_log_panel(
         container,
