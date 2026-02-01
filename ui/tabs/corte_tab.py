@@ -47,6 +47,19 @@ def create_tab(parent, context):
             return None, None
         return rango["inicio"] / 60.0, rango["fin"] / 60.0
 
+    def normalizar_posicion_visualizador(valor: str) -> str:
+        texto = (valor or "centro").strip().lower()
+        if texto not in ("arriba", "abajo", "centro"):
+            return "centro"
+        return texto
+
+    def capitalizar_posicion(valor: str) -> str:
+        mapeo = {"centro": "Centro", "arriba": "Arriba", "abajo": "Abajo"}
+        return mapeo.get(normalizar_posicion_visualizador(valor), "Centro")
+
+    def obtener_posicion_visualizador():
+        return normalizar_posicion_visualizador(posicion_visualizador_var.get())
+
     def iniciar_proceso():
         if not estado["path"]:
             log("Selecciona un video primero.")
@@ -76,6 +89,9 @@ def create_tab(parent, context):
 
         def run_corte():
             try:
+                estado["visualizador"] = visualizador_var.get()
+                estado["posicion_visualizador"] = obtener_posicion_visualizador()
+                solo_video_flag = not visualizador_var.get()
                 result = procesar_video_fn(
                     estado["path"],
                     False,
@@ -92,7 +108,9 @@ def create_tab(parent, context):
                     fondo_path,
                     fondo_estilo,
                     fondo_escala,
-                    True,
+                    solo_video=solo_video_flag,
+                    visualizador=visualizador_var.get(),
+                    posicion_visualizador=obtener_posicion_visualizador(),
                 )
                 if procesar_todo_var.get():
                     videos = []
@@ -163,6 +181,11 @@ def create_tab(parent, context):
 
         def run_auto():
             try:
+                estado["visualizador"] = visualizador_var.get()
+                estado["posicion_visualizador"] = obtener_posicion_visualizador()
+                solo_video_flag = auto_subs_var.get()
+                if visualizador_var.get():
+                    solo_video_flag = False
                 result = procesar_video_fn(
                     estado["path"],
                     False,
@@ -179,7 +202,9 @@ def create_tab(parent, context):
                     fondo_path,
                     fondo_estilo,
                     fondo_escala,
-                    auto_subs_var.get(),
+                    solo_video=solo_video_flag,
+                    visualizador=visualizador_var.get(),
+                    posicion_visualizador=obtener_posicion_visualizador(),
                 )
                 videos = []
                 if isinstance(result, dict):
@@ -366,16 +391,41 @@ def create_tab(parent, context):
     )
     rb_alt.grid(row=7, column=0, sticky="w", padx=14, pady=(0, 12))
 
+    visualizador_var = tk.BooleanVar(value=estado.get("visualizador", False))
+    chk_visualizador = ctk.CTkCheckBox(
+        config,
+        text="Agregar visualizador de música",
+        variable=visualizador_var,
+    )
+    chk_visualizador.grid(row=8, column=0, sticky="w", padx=14, pady=(0, 12))
+
+    posicion_visualizador_var = tk.StringVar(
+        value=capitalizar_posicion(estado.get("posicion_visualizador", "centro"))
+    )
+    lbl_pos_visual = ctk.CTkLabel(
+        config,
+        text="Posición del visualizador:",
+        font=ctk.CTkFont(size=12),
+    )
+    lbl_pos_visual.grid(row=9, column=0, sticky="w", padx=14, pady=(0, 4))
+    opt_pos_visual = ctk.CTkOptionMenu(
+        config,
+        values=["Centro", "Arriba", "Abajo"],
+        variable=posicion_visualizador_var,
+        width=140,
+    )
+    opt_pos_visual.grid(row=10, column=0, sticky="w", padx=14, pady=(0, 12))
+
     fondo_var = ctk.BooleanVar(value=False)
     chk_fondo = ctk.CTkCheckBox(
         config,
         text="Aplicar imagen de fondo",
         variable=fondo_var,
     )
-    chk_fondo.grid(row=9, column=0, sticky="w", padx=14, pady=(0, 8))
+    chk_fondo.grid(row=11, column=0, sticky="w", padx=14, pady=(0, 8))
 
     row_fondo = ctk.CTkFrame(config, fg_color="transparent")
-    row_fondo.grid(row=10, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_fondo.grid(row=12, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_fondo.grid_columnconfigure(1, weight=1)
 
     def seleccionar_fondo():
@@ -399,17 +449,17 @@ def create_tab(parent, context):
 
     fondo_estilo_var = ctk.StringVar(value="Fill")
     lbl_estilo = ctk.CTkLabel(config, text="Estilo de fondo:", font=ctk.CTkFont(size=12))
-    lbl_estilo.grid(row=11, column=0, sticky="w", padx=14, pady=(0, 6))
+    lbl_estilo.grid(row=13, column=0, sticky="w", padx=14, pady=(0, 6))
 
     opt_estilo = ctk.CTkOptionMenu(
         config,
         values=["Fill", "Fit", "Blur"],
         variable=fondo_estilo_var,
     )
-    opt_estilo.grid(row=12, column=0, sticky="w", padx=14, pady=(0, 12))
+    opt_estilo.grid(row=14, column=0, sticky="w", padx=14, pady=(0, 12))
 
     row_fondo_escala = ctk.CTkFrame(config, fg_color="transparent")
-    row_fondo_escala.grid(row=13, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_fondo_escala.grid(row=15, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_fondo_escala.grid_columnconfigure(1, weight=1)
 
     lbl_fondo_escala = ctk.CTkLabel(row_fondo_escala, text="Tamano video sobre fondo", font=ctk.CTkFont(size=12))
@@ -429,7 +479,7 @@ def create_tab(parent, context):
     btn_clear_fondo.grid(row=0, column=2, sticky="e", padx=(8, 0))
 
     row_recorte = ctk.CTkFrame(config, fg_color="transparent")
-    row_recorte.grid(row=14, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_recorte.grid(row=16, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_recorte.grid_columnconfigure(1, weight=1)
 
     lbl_recorte = ctk.CTkLabel(row_recorte, text="Recorte total", font=ctk.CTkFont(size=12))
@@ -454,7 +504,7 @@ def create_tab(parent, context):
         font=ctk.CTkFont(size=12),
         text_color="#9aa4b2",
     )
-    hint_recorte.grid(row=15, column=0, sticky="w", padx=14, pady=(0, 12))
+    hint_recorte.grid(row=17, column=0, sticky="w", padx=14, pady=(0, 12))
 
     actions = ctk.CTkFrame(top, corner_radius=10)
     actions.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)

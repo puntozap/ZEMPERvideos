@@ -912,6 +912,119 @@ def generar_vertical_tiktok(
         log_fn("🧩 Apilando en formato 9:16...")
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+def obtener_expresion_overlay(posicion: str, margen: int = 10) -> str:
+    """
+    Genera la expresión de overlay para FFmpeg según la posición indicada.
+    """
+    pos = (posicion or "centro").strip().lower()
+    margen = max(0, int(margen))
+    if pos in ("arriba", "top"):
+        return f"(W-w)/2:{margen}"
+    if pos in ("abajo", "bottom"):
+        return f"(W-w)/2:H-h-{margen}"
+    return f"(W-w)/2:(H-h)/2"
+
+
+def generar_visualizador_audio(
+    audio_path: str,
+    output_path: str,
+    width: int,
+    height: int,
+    estilo: str = "showwaves",
+    color: str = "#FFFFFF",
+    fps: int = 30,
+    log_fn=None
+):
+    """
+    Genera un video de visualizador con fondo transparente a partir de un audio.
+    """
+    if not os.path.exists(audio_path):
+        raise FileNotFoundError(f"No se encontró el audio del visualizador: {audio_path}")
+    width = max(32, int(width or 640))
+    height = max(32, int(height or 160))
+    width -= width % 2
+    height -= height % 2
+    width = max(2, width)
+    height = max(2, height)
+    fps = max(12, min(60, int(fps or 30)))
+    estilo = (estilo or "showwaves").lower()
+    if estilo not in ("showwaves", "showspectrum", "avectorscope"):
+        estilo = "showwaves"
+    color = (color or "#FFFFFF").strip()
+    duration = obtener_duracion_segundos(audio_path)
+    if duration <= 0:
+        duration = 0.1
+    filter_complex = (
+        f"[0:a]aformat=channel_layouts=mono,{estilo}=s={width}x{height}:mode=line:colors={color}[waves];"
+        f"color=color=0x00000000:s={width}x{height}:d={duration:.3f}[base];"
+        "[base][waves]overlay=format=auto:shortest=1,format=rgba"
+    )
+    salida_dir = os.path.dirname(output_path)
+    if salida_dir:
+        asegurar_dir(salida_dir)
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", audio_path,
+        "-filter_complex", filter_complex,
+        "-pix_fmt", "yuva420p",
+        "-c:v", "libx264",
+        "-r", str(fps),
+        "-an",
+        "-shortest",
+        output_path
+    ]
+    if log_fn:
+        log_fn(f"🎚 Generando visualizador ({os.path.basename(output_path)})")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        if log_fn:
+            err = (result.stderr or "").strip()
+            log_fn(f"❌ Visualizador falló: {err[-300:]}")
+        raise RuntimeError("No se pudo generar el visualizador de audio.")
+    return output_path
+
+
+def overlay_visualizador(
+    video_path: str,
+    visual_path: str,
+    output_path: str,
+    posicion: str = "centro",
+    margen: int = 10,
+    log_fn=None
+):
+    """
+    Superpone el visualizador generado sobre el video original.
+    """
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"No se encontró el video base: {video_path}")
+    if not os.path.exists(visual_path):
+        raise FileNotFoundError(f"No se encontró el visualizador generado: {visual_path}")
+    salida_dir = os.path.dirname(output_path)
+    if salida_dir:
+        asegurar_dir(salida_dir)
+    overlay_expr = obtener_expresion_overlay(posicion, margen)
+    filtro = f"[0:v][1:v]overlay={overlay_expr}:format=auto,format=yuv420p"
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-i", visual_path,
+        "-filter_complex", filtro,
+        "-map", "0:a?",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        output_path
+    ]
+    if log_fn:
+        log_fn(f"🧩 Aplicando overlay del visualizador ({posicion})")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        if log_fn:
+            err = (result.stderr or "").strip()
+            log_fn(f"❌ Overlay falló: {err[-300:]}")
+        raise RuntimeError("No se pudo superponer el visualizador al video.")
+    return output_path
+
 def aplicar_fondo_imagen(
     input_path: str,
     output_path: str,

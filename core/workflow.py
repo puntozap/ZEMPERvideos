@@ -17,6 +17,9 @@ from core.utils import (
     generar_vertical_tiktok,
     aplicar_fondo_imagen,
     obtener_duracion_segundos,
+    obtener_tamano_video,
+    generar_visualizador_audio,
+    overlay_visualizador,
 )
 from core.transcriber import transcribir_srt
 import re
@@ -42,6 +45,9 @@ def procesar_video(
     solo_video: bool = False,
     barra=None,
     logs=None,
+    visualizador: bool = False,
+    posicion_visualizador: str = "centro",
+    color_visualizador: str = "#B753FF",
 ):
     """
     Procesa un archivo (video o audio):
@@ -237,6 +243,42 @@ def procesar_video(
             for idx, _parte in enumerate(partes_audio, start=1):
                 if logs: logs(f"Parte {idx}/{len(partes_audio)} lista (sin transcripcion).")
                 if barra: barra.set(idx / len(partes_audio))
+
+            if visualizador and partes_audio and output_videos:
+                original_outputs = output_videos[:]
+                visualizado = []
+                visual_dir = os.path.join(base_dir, "visualizador")
+                if logs:
+                    logs("Visualizador activado: generando onda y aplicando overlay...")
+                for idx, (audio_seg, video_seg) in enumerate(zip(partes_audio, original_outputs), start=1):
+                    try:
+                        width, height = obtener_tamano_video(video_seg)
+                        wave_height = max(64, min(height, int(height * 0.18)))
+                        wave_path = os.path.join(visual_dir, f"{base_name}_parte_{idx:03d}_wave.mp4")
+                        overlay_path = os.path.join(visual_dir, f"{base_name}_parte_{idx:03d}_wave_out.mp4")
+                        generar_visualizador_audio(
+                            audio_path=audio_seg,
+                            output_path=wave_path,
+                            width=width,
+                            height=wave_height,
+                            color=color_visualizador,
+                            log_fn=logs
+                        )
+                        overlay_visualizador(
+                            video_path=video_seg,
+                            visual_path=wave_path,
+                            output_path=overlay_path,
+                            posicion=posicion_visualizador,
+                            log_fn=logs
+                        )
+                        visualizado.append(overlay_path)
+                    except Exception as exc:
+                        if logs:
+                            logs(f"Advertencia: visualizador parte {idx} no se aplicó ({exc})")
+                        visualizado.append(video_seg)
+            if len(original_outputs) > len(visualizado):
+                visualizado.extend(original_outputs[len(visualizado):])
+            output_videos = visualizado
 
         return {
             "videos": output_videos,

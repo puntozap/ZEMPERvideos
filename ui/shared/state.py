@@ -3,7 +3,13 @@ from core import stop_control
 
 def create_state():
     return {
-        "estado": {"path": None, "es_audio": False, "fondo_path": None},
+        "estado": {
+            "path": None,
+            "es_audio": False,
+            "fondo_path": None,
+            "visualizador": False,
+            "posicion_visualizador": "centro",
+        },
         "rango": {"duracion": 0.0, "inicio": 0.0, "fin": 0.0},
         "rango_ind": {"duracion": 0.0, "inicio": 0.0, "fin": 0.0},
         "srt_state": {"items": []},
