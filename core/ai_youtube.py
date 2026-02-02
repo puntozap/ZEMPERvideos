@@ -3,9 +3,18 @@ import re
 import requests
 from dotenv import load_dotenv
 
-from core.transcriber import transcribir
-from core.youtube_upload import upload_video
-from core.utils import obtener_duracion_segundos
+from core.extractor import extraer_audio
+from core.transcriber import transcribir, transcribir_srt
+from core.utils import (
+    output_base_dir,
+    output_subtitulados_dir,
+    obtener_duracion_segundos,
+)
+from core.youtube_upload import YouTubeUploadError, upload_video
+
+MAX_METADATA_ATTEMPTS = 3
+MAX_TRANSCRIPTION_CHARS = 9000
+DEFAULT_SRT_MODEL = "base"
 
 load_dotenv()
 
@@ -47,11 +56,64 @@ def _parse_response(content: str) -> dict[str, str]:
     return fields
 
 
+def _obtener_transcripcion_para_youtube(
+    video_path: str, idioma: str, logs=None, max_chars: int = MAX_TRANSCRIPTION_CHARS
+) -> str:
+    if logs:
+        logs("Transcribiendo video para IA...")
+    texto = transcribir(video_path, idioma=idioma, model_size="small")
+    if not texto:
+        raise RuntimeError("La transcripción no devolvió texto válido.")
+    if len(texto) > max_chars:
+        if logs:
+            logs(f"Transcripción truncada a {max_chars} caracteres.")
+        texto = texto[:max_chars]
+    return texto
+
+
+def _extraer_audio_y_subtitulos(
+    video_path: str,
+    idioma: str,
+    logs=None,
+    model_size: str = DEFAULT_SRT_MODEL,
+) -> tuple[str, str | None]:
+    base_dir = output_base_dir(video_path)
+    audio_dir = os.path.join(base_dir, "audios")
+    os.makedirs(audio_dir, exist_ok=True)
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
+    safe_name = re.sub(r"[<>:\"/\\|?*]", "_", video_name)
+    audio_name = f"{safe_name}_youtube_audio.mp3"
+    audio_path = os.path.join(audio_dir, audio_name)
+    if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+        if logs:
+            logs(f"Usando audio existente para subtítulos: {audio_path}")
+    else:
+        extraer_audio(video_path, audio_path, log_fn=logs)
+
+    subs_dir = output_subtitulados_dir(video_path)
+    os.makedirs(subs_dir, exist_ok=True)
+    srt_path = None
+    try:
+        srt_path = transcribir_srt(
+            audio_path,
+            subs_dir,
+            idioma=idioma,
+            model_size=model_size,
+        )
+        if logs:
+            logs(f"SRT generado: {srt_path}")
+    except Exception as exc:
+        if logs:
+            logs(f"Advertencia: no se pudo generar el SRT ({exc})")
+    return audio_path, srt_path
+
+
 def generar_textos_youtube(
     video_path: str,
     api_key: str | None = None,
     model: str = "gpt-4o-mini",
     idioma: str = "es",
+    texto: str | None = None,
     logs=None,
 ) -> dict[str, str]:
     if not video_path:
@@ -59,26 +121,30 @@ def generar_textos_youtube(
     api_key = _fetch_api_key(api_key)
     if not api_key:
         raise RuntimeError("Falta la API key de OpenAI (OPENAI_API_KEY).")
-    if logs:
-        logs("Transcribiendo video para IA...")
-    texto = transcribir(video_path, idioma=idioma, model_size="small")
-    if not texto:
-        raise RuntimeError("La transcripción no devolvió texto válido.")
-    max_chars = 9000
-    if len(texto) > max_chars:
+    max_chars = MAX_TRANSCRIPTION_CHARS
+    if texto is None:
+        texto = _obtener_transcripcion_para_youtube(video_path, idioma, logs=logs, max_chars=max_chars)
+    else:
         if logs:
-            logs(f"Transcripción truncada a {max_chars} caracteres.")
-        texto = texto[:max_chars]
+            logs("Usando transcripción existente para IA...")
+        texto = texto.strip()
+        if not texto:
+            raise RuntimeError("La transcripción existente no contiene texto.")
+        if len(texto) > max_chars:
+            texto = texto[:max_chars]
 
     system = (
-        "Eres un redactor profesional para YouTube. "
-        "Genera un resultado en español con el siguiente formato exacto:\n"
+        "Eres un redactor profesional para YouTube con enfoque periodístico y clickbait sano. "
+        "Genera en español un resultado que siga estrictamente este formato:\n"
         "TITULO:\n...\n"
         "DESCRIPCION:\n...\n"
         "RESUMEN:\n...\n"
         "PALABRAS:\n...\n"
-        "El título debe captar la atención, la descripción resumir el contenido y el resumen debe explicar el gancho y el valor. "
-        "Incluye palabras clave o hashtags relevantes en PALABRAS."
+        "El TITULO debe tener entre 15 y 100 caracteres, no puede ser solo espacios ni quedar vacío, y debe destacar un gancho informativo contundente sin exagerar. "
+        "La DESCRIPCION debe resumir el contenido y transmitir el valor principal del video. "
+        "El RESUMEN debe explicar el gancho y establecer el contexto periodístico. "
+        "PALABRAS debe listar hashtags o palabras clave relevantes separados por comas (sin duplicados) y no debe repetir literalmente frases completas de las otras secciones. "
+        "Si algún campo no puede generarse con veracidad, escribe 'NO DISPONIBLE' en ese campo."
     )
     user = f"Transcripción:\n{texto}"
     payload = {
@@ -87,7 +153,7 @@ def generar_textos_youtube(
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "temperature": 0.7,
+        "temperature": 0,
     }
     if logs:
         logs("Llamando a OpenAI para generar metadatos...")
@@ -116,28 +182,59 @@ def subir_video_youtube_desde_ia(
     idioma: str = "es",
     privacy: str = "private",
     log_fn=None,
+    max_attempts: int = MAX_METADATA_ATTEMPTS,
 ) -> dict[str, str]:
-    metadata = generar_textos_youtube(video_path, api_key, model=model, idioma=idioma, logs=log_fn)
-    title = metadata.get("titulo") or os.path.splitext(os.path.basename(video_path))[0]
-    description = metadata.get("descripcion", "")
-    hashtags = _format_hashtags(metadata.get("palabras", ""))
-    if hashtags:
-        description = f"{description}\n\n{','.join(hashtags)}"
-    tags_list = [tag for tag in hashtags]
+    if not video_path:
+        raise ValueError("Video no especificado para subir.")
+    attempts = max(1, int(max_attempts))
+    fallback_title = os.path.splitext(os.path.basename(video_path))[0]
     duration = obtener_duracion_segundos(video_path)
     is_short = duration <= 60
-    video_id = upload_video(
-        video_path,
-        title,
-        description,
-        tags_list,
-        privacy=privacy,
-        is_short=is_short,
-        log_fn=log_fn,
-    )
-    return {
-        "video_id": video_id,
-        "title": title,
-        "description": description,
-        "tags": tags_list,
-    }
+    texto_base = _obtener_transcripcion_para_youtube(video_path, idioma, logs=log_fn)
+    _extraer_audio_y_subtitulos(video_path, idioma, logs=log_fn)
+
+    for intento in range(1, attempts + 1):
+        if log_fn:
+            log_fn(f"Intento {intento}/{attempts} de subida a YouTube.")
+        metadata = generar_textos_youtube(
+            video_path,
+            api_key,
+            model=model,
+            idioma=idioma,
+            texto=texto_base,
+            logs=log_fn,
+        )
+        title = metadata.get("titulo", "").strip() or fallback_title
+        description = metadata.get("descripcion", "")
+        hashtags = _format_hashtags(metadata.get("palabras", ""))
+        if hashtags:
+            description = f"{description}\n\n{','.join(hashtags)}"
+        tags_list = [tag for tag in hashtags]
+        try:
+            video_id = upload_video(
+                video_path,
+                title,
+                description,
+                tags_list,
+                privacy=privacy,
+                is_short=is_short,
+                log_fn=log_fn,
+            )
+            if log_fn:
+                log_fn(f"Video subido con ID: {video_id}")
+            return {
+                "video_id": video_id,
+                "title": title,
+                "description": description,
+                "tags": tags_list,
+            }
+        except YouTubeUploadError as exc:
+            if intento >= attempts:
+                raise YouTubeUploadError(
+                    f"No se pudo iniciar la carga tras {attempts} intentos: {exc}"
+                ) from exc
+            if log_fn:
+                log_fn(
+                    f"Upload falló en el intento {intento}: {exc}; regenerando metadatos y reintentando."
+                )
+            continue
