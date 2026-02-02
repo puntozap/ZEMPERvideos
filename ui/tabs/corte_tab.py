@@ -91,6 +91,9 @@ def create_tab(parent, context):
             try:
                 estado["visualizador"] = visualizador_var.get()
                 estado["posicion_visualizador"] = obtener_posicion_visualizador()
+                estado["visualizador_opacidad"] = visualizador_opacity_var.get()
+                estado["visualizador_color"] = visualizador_color_var.get()
+                estado["visualizador_margen"] = int(float(visualizador_margin_var.get()))
                 solo_video_flag = not visualizador_var.get()
                 result = procesar_video_fn(
                     estado["path"],
@@ -111,6 +114,14 @@ def create_tab(parent, context):
                     solo_video=solo_video_flag,
                     visualizador=visualizador_var.get(),
                     posicion_visualizador=obtener_posicion_visualizador(),
+                    visualizador_opacidad=visualizador_opacity_var.get(),
+                    visualizador_color=visualizador_color_var.get(),
+                    visualizador_margen=int(float(visualizador_margin_var.get())),
+                    visualizador_exposicion=estado.get("visualizador_exposicion", 0.0),
+                    visualizador_contraste=estado.get("visualizador_contraste", 1.0),
+                    visualizador_saturacion=estado.get("visualizador_saturacion", 1.0),
+                    visualizador_temperatura=estado.get("visualizador_temperatura", 0.0),
+                    modo_visualizador=estado.get("visualizador_blend_mode", "lighten"),
                 )
                 if procesar_todo_var.get():
                     videos = []
@@ -186,6 +197,9 @@ def create_tab(parent, context):
                 solo_video_flag = auto_subs_var.get()
                 if visualizador_var.get():
                     solo_video_flag = False
+                estado["visualizador_opacidad"] = visualizador_opacity_var.get()
+                estado["visualizador_color"] = visualizador_color_var.get()
+                estado["visualizador_margen"] = int(float(visualizador_margin_var.get()))
                 result = procesar_video_fn(
                     estado["path"],
                     False,
@@ -205,6 +219,14 @@ def create_tab(parent, context):
                     solo_video=solo_video_flag,
                     visualizador=visualizador_var.get(),
                     posicion_visualizador=obtener_posicion_visualizador(),
+                    visualizador_opacidad=visualizador_opacity_var.get(),
+                    visualizador_color=visualizador_color_var.get(),
+                    visualizador_margen=int(float(visualizador_margin_var.get())),
+                    visualizador_exposicion=estado.get("visualizador_exposicion", 0.0),
+                    visualizador_contraste=estado.get("visualizador_contraste", 1.0),
+                    visualizador_saturacion=estado.get("visualizador_saturacion", 1.0),
+                    visualizador_temperatura=estado.get("visualizador_temperatura", 0.0),
+                    modo_visualizador=estado.get("visualizador_blend_mode", "lighten"),
                 )
                 videos = []
                 if isinstance(result, dict):
@@ -416,16 +438,71 @@ def create_tab(parent, context):
     )
     opt_pos_visual.grid(row=10, column=0, sticky="w", padx=14, pady=(0, 12))
 
+    visualizador_opacity_var = tk.DoubleVar(value=estado.get("visualizador_opacidad", 0.65))
+    lbl_opacity = ctk.CTkLabel(config, text="Opacidad del visualizador:", font=ctk.CTkFont(size=12))
+    lbl_opacity.grid(row=11, column=0, sticky="w", padx=14, pady=(0, 4))
+    lbl_opacity_value = ctk.CTkLabel(config, text="", font=ctk.CTkFont(size=12))
+    lbl_opacity_value.grid(row=11, column=0, sticky="e", padx=14, pady=(0, 4))
+
+    def actualizar_label_opacidad(value=None):
+        val = float(value if value is not None else visualizador_opacity_var.get())
+        lbl_opacity_value.configure(text=f"{int(val * 100)}%")
+
+    slider_opacity = ctk.CTkSlider(
+        config,
+        from_=0.2,
+        to=1.0,
+        number_of_steps=16,
+        variable=visualizador_opacity_var,
+        command=lambda value: actualizar_label_opacidad(value),
+        width=220,
+    )
+    slider_opacity.grid(row=12, column=0, sticky="w", padx=14, pady=(0, 12))
+    actualizar_label_opacidad()
+
+    visualizador_color_var = tk.StringVar(value=estado.get("visualizador_color", "#FFFFFF"))
+    lbl_color = ctk.CTkLabel(config, text="Color del visualizador:", font=ctk.CTkFont(size=12))
+    lbl_color.grid(row=13, column=0, sticky="w", padx=14, pady=(0, 4))
+    entry_color = ctk.CTkEntry(
+        config,
+        width=120,
+        textvariable=visualizador_color_var,
+        placeholder_text="#RRGGBB",
+    )
+    entry_color.grid(row=14, column=0, sticky="w", padx=14, pady=(0, 12))
+
+    visualizador_margin_var = tk.DoubleVar(value=estado.get("visualizador_margen", 0))
+    lbl_margin = ctk.CTkLabel(config, text="Margen lateral (px cada lado):", font=ctk.CTkFont(size=12))
+    lbl_margin.grid(row=15, column=0, sticky="w", padx=14, pady=(0, 4))
+    lbl_margin_value = ctk.CTkLabel(config, text="", font=ctk.CTkFont(size=12))
+    lbl_margin_value.grid(row=15, column=0, sticky="e", padx=14, pady=(0, 4))
+
+    def actualizar_label_margen(value=None):
+        val = int(float(value if value is not None else visualizador_margin_var.get()))
+        lbl_margin_value.configure(text=f"{val}px")
+
+    slider_margin = ctk.CTkSlider(
+        config,
+        from_=0,
+        to=220,
+        number_of_steps=22,
+        variable=visualizador_margin_var,
+        command=lambda value: actualizar_label_margen(value),
+        width=220,
+    )
+    slider_margin.grid(row=16, column=0, sticky="w", padx=14, pady=(0, 12))
+    actualizar_label_margen()
+
     fondo_var = ctk.BooleanVar(value=False)
     chk_fondo = ctk.CTkCheckBox(
         config,
         text="Aplicar imagen de fondo",
         variable=fondo_var,
     )
-    chk_fondo.grid(row=11, column=0, sticky="w", padx=14, pady=(0, 8))
+    chk_fondo.grid(row=17, column=0, sticky="w", padx=14, pady=(0, 8))
 
     row_fondo = ctk.CTkFrame(config, fg_color="transparent")
-    row_fondo.grid(row=12, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_fondo.grid(row=18, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_fondo.grid_columnconfigure(1, weight=1)
 
     def seleccionar_fondo():
@@ -449,17 +526,17 @@ def create_tab(parent, context):
 
     fondo_estilo_var = ctk.StringVar(value="Fill")
     lbl_estilo = ctk.CTkLabel(config, text="Estilo de fondo:", font=ctk.CTkFont(size=12))
-    lbl_estilo.grid(row=13, column=0, sticky="w", padx=14, pady=(0, 6))
+    lbl_estilo.grid(row=19, column=0, sticky="w", padx=14, pady=(0, 6))
 
     opt_estilo = ctk.CTkOptionMenu(
         config,
         values=["Fill", "Fit", "Blur"],
         variable=fondo_estilo_var,
     )
-    opt_estilo.grid(row=14, column=0, sticky="w", padx=14, pady=(0, 12))
+    opt_estilo.grid(row=20, column=0, sticky="w", padx=14, pady=(0, 12))
 
     row_fondo_escala = ctk.CTkFrame(config, fg_color="transparent")
-    row_fondo_escala.grid(row=15, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_fondo_escala.grid(row=21, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_fondo_escala.grid_columnconfigure(1, weight=1)
 
     lbl_fondo_escala = ctk.CTkLabel(row_fondo_escala, text="Tamano video sobre fondo", font=ctk.CTkFont(size=12))
@@ -479,7 +556,7 @@ def create_tab(parent, context):
     btn_clear_fondo.grid(row=0, column=2, sticky="e", padx=(8, 0))
 
     row_recorte = ctk.CTkFrame(config, fg_color="transparent")
-    row_recorte.grid(row=16, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_recorte.grid(row=22, column=0, sticky="ew", padx=14, pady=(0, 10))
     row_recorte.grid_columnconfigure(1, weight=1)
 
     lbl_recorte = ctk.CTkLabel(row_recorte, text="Recorte total", font=ctk.CTkFont(size=12))
@@ -504,7 +581,7 @@ def create_tab(parent, context):
         font=ctk.CTkFont(size=12),
         text_color="#9aa4b2",
     )
-    hint_recorte.grid(row=17, column=0, sticky="w", padx=14, pady=(0, 12))
+    hint_recorte.grid(row=23, column=0, sticky="w", padx=14, pady=(0, 12))
 
     actions = ctk.CTkFrame(top, corner_radius=10)
     actions.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)

@@ -4,9 +4,13 @@ import winsound
 from ui.shared import helpers
 from ui.shared.state import create_state
 from ui.shared.preview import create_subtitle_preview
+from core.workflow import generar_visualizador_solo
 from ui.tabs import (
     corte_tab,
     corte_individual_tab,
+    corte_visualizer_tab,
+    pegar_visualizador_tab,
+    cortar_visualizador_tab,
     srt_tab,
     subtitular_tab,
     ia_clips_tab,
@@ -111,6 +115,7 @@ def iniciar_app(procesar_video_fn):
     tabs = ctk.CTkTabview(root, corner_radius=12)
     tabs.grid(row=1, column=0, sticky="nsew", padx=10, pady=(6, 10))
     tabs.add("Corte")
+    tabs.add("Cortar visualizador")
     tabs.add("Subtitulos")
     tabs.add("IA generadores")
     tabs.add("Descargas")
@@ -118,6 +123,7 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Actividad")
 
     tab_corte_main = tabs.tab("Corte")
+    tab_cortar_visual = tabs.tab("Cortar visualizador")
     tab_sub_main = tabs.tab("Subtitulos")
     tab_ia_main = tabs.tab("IA generadores")
     tab_desc_main = tabs.tab("Descargas")
@@ -128,6 +134,8 @@ def iniciar_app(procesar_video_fn):
     corte_tabs.pack(fill="both", expand=True, padx=6, pady=6)
     corte_tabs.add("Corte editado")
     corte_tabs.add("Corte individual")
+    corte_tabs.add("Visualizador")
+    corte_tabs.add("Pegar visualizador")
 
     sub_tabs = ctk.CTkTabview(tab_sub_main, corner_radius=10)
     sub_tabs.pack(fill="both", expand=True, padx=6, pady=6)
@@ -190,6 +198,28 @@ def iniciar_app(procesar_video_fn):
     })
     ind_scroll = ind_api["scroll"]
     actualizar_etiquetas_rango_ind = ind_api["actualizar_etiquetas_rango_ind"]
+
+    tab_visual = corte_tabs.tab("Visualizador")
+    tab_pegar_visual = corte_tabs.tab("Pegar visualizador")
+    corte_visualizer_tab.create_tab(tab_visual, {
+        "estado": estado,
+    })
+    pegar_visualizador_tab.create_tab(tab_pegar_visual, {
+        "estado": estado,
+        "log": log,
+        "stop_control": stop_control,
+        "alerta_busy": alerta_busy,
+        "beep_fin": beep_fin,
+    })
+
+    cortar_visualizador_tab.create_tab(tab_cortar_visual, {
+        "estado": estado,
+        "log": log,
+        "log_seccion": log_seccion,
+        "alerta_busy": alerta_busy,
+        "stop_control": stop_control,
+        "generar_visualizador_fn": generar_visualizador_solo,
+    })
 
     srt_api = srt_tab.create_tab(tab_srt, {
         "srt_state": srt_state,

@@ -933,6 +933,11 @@ def generar_visualizador_audio(
     estilo: str = "showwaves",
     color: str = "#FFFFFF",
     fps: int = 30,
+    margen_horizontal: int = 0,
+    exposicion: float = 0.0,
+    contraste: float = 1.0,
+    saturacion: float = 1.0,
+    temperatura: float = 0.0,
     log_fn=None
 ):
     """
@@ -951,13 +956,39 @@ def generar_visualizador_audio(
     if estilo not in ("showwaves", "showspectrum", "avectorscope"):
         estilo = "showwaves"
     color = (color or "#FFFFFF").strip()
+    if not color.startswith("#"):
+        color = "#" + color
     duration = obtener_duracion_segundos(audio_path)
     if duration <= 0:
         duration = 0.1
+    exposicion = max(-1.0, min(1.0, float(exposicion)))
+    contraste = max(0.2, min(2.5, float(contraste)))
+    saturacion = max(0.0, min(3.0, float(saturacion)))
+    temperatura = max(-1.0, min(1.0, float(temperatura)))
+
+    temp_filter = ""
+    if abs(temperatura) > 1e-3:
+        gs = temperatura / 2.0
+        temp_filter = f",colorbalance=rs={temperatura:.3f}:gs={gs:.3f}:bs={-temperatura:.3f}"
+
+    waves_adjust = (
+        f"[waves]eq=brightness={exposicion:.3f}:contrast={contraste:.3f}:saturation={saturacion:.3f}"
+        f"{temp_filter}[waves_rgba];"
+    )
+
+    margen = max(0, int(margen_horizontal))
+    pad_filter = (
+        f"[over]pad=iw+{margen*2}:ih:{margen}:0:color=0x00000000[pad];[pad]format=rgba"
+        if margen > 0 else
+        "[over]format=rgba"
+    )
     filter_complex = (
         f"[0:a]aformat=channel_layouts=mono,{estilo}=s={width}x{height}:mode=line:colors={color}[waves];"
+        f"{waves_adjust}"
         f"color=color=0x00000000:s={width}x{height}:d={duration:.3f}[base];"
-        "[base][waves]overlay=format=auto:shortest=1,format=rgba"
+        "[base]format=rgba[bg];"
+        "[bg][waves_rgba]overlay=format=auto:shortest=1[over];"
+        f"{pad_filter}"
     )
     salida_dir = os.path.dirname(output_path)
     if salida_dir:
@@ -990,6 +1021,8 @@ def overlay_visualizador(
     output_path: str,
     posicion: str = "centro",
     margen: int = 10,
+    opacidad: float = 0.75,
+    modo_combinacion: str = "lighten",
     log_fn=None
 ):
     """
@@ -1003,7 +1036,22 @@ def overlay_visualizador(
     if salida_dir:
         asegurar_dir(salida_dir)
     overlay_expr = obtener_expresion_overlay(posicion, margen)
-    filtro = f"[0:v][1:v]overlay={overlay_expr}:format=auto,format=yuv420p"
+    opacidad = max(0.0, min(1.0, float(opacidad)))
+    blend = (modo_combinacion or "lighten").strip().lower()
+    blend_map = {
+        "normal": "normal",
+        "darken": "darken",
+        "multiply": "multiply",
+        "lighten": "lighten",
+        "screen": "screen",
+        "overlay": "overlay",
+    }
+    blend_mode = blend_map.get(blend, "lighten")
+    filtro = (
+        f"[1:v]format=rgba,colorchannelmixer=aa={opacidad}[vis];"
+        f"[0:v][vis]overlay={overlay_expr}:format=auto:shortest=1[over];"
+        f"[over]format=yuv420p"
+    )
     cmd = [
         "ffmpeg", "-y",
         "-i", video_path,
@@ -1023,6 +1071,50 @@ def overlay_visualizador(
             err = (result.stderr or "").strip()
             log_fn(f"❌ Overlay falló: {err[-300:]}")
         raise RuntimeError("No se pudo superponer el visualizador al video.")
+    return output_path
+
+
+def overlay_image_temporizada(
+    video_path: str,
+    image_path: str,
+    output_path: str,
+    start_sec: float,
+    duration: float,
+    log_fn=None
+):
+    if not os.path.exists(video_path):
+        raise FileNotFoundError(f"No se encontró el video para overlay de imagen: {video_path}")
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"No se encontró la imagen overlay: {image_path}")
+    if duration <= 0:
+        raise ValueError("La duración del overlay debe ser mayor que cero.")
+    enable_expr = f"between(t,{max(0, start_sec):.3f},{start_sec+duration:.3f})"
+    filtro = (
+        f"[1:v]format=rgba[img];"
+        f"[0:v][img]overlay=x=(W-w)/2:y=(H-h)/2:enable='{enable_expr}':format=auto:shortest=1[over];"
+        f"[over]format=yuv420p"
+    )
+    salida_dir = os.path.dirname(output_path)
+    if salida_dir:
+        asegurar_dir(salida_dir)
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-loop", "1", "-i", image_path,
+        "-filter_complex", filtro,
+        "-map", "[over]",
+        "-map", "0:a?",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        "-shortest",
+        output_path
+    ]
+    if log_fn:
+        log_fn(f"🖼️ Agregando imagen en {start_sec:.2f}s por {duration:.2f}s")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"No se pudo aplicar la imagen overlay: {(result.stderr or '').strip()[-300:]}")
     return output_path
 
 def aplicar_fondo_imagen(

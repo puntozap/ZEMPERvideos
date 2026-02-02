@@ -12,6 +12,13 @@ Editor de video de escritorio orientado a la creación de cortes precisos, verti
 - **Gestión de credenciales OAuth:** registra múltiples `client_secret` en `credentials/`, inicia un servidor en `localhost:4850` para capturar códigos, guarda refresh tokens y actualiza el botón de registro con los datos necesarios.
 - **Panel de actividad y logs:** cada evento (corte, upload, generación IA, error) queda documentado en la pestaña de actividad; la interfaz incluye scroll general y subpestañas fijas para YouTube, Corte, Subtítulos, IA, Descargas y más.
 
+## Visualizador de música
+- La pestaña *Visualizador* permite ajustar la onda sonora que se superpone sobre los videos procesados: exposición, contraste, saturación, temperatura y transparencia se pueden regular con sliders y regresar al valor por defecto con un botón único.
+- A la derecha se puede cargar una imagen temporal (definir archivo, segundo de aparición y duración) y observar un placeholder que anticipa dónde se verá el video más la onda cuando la función esté activa.
+- Todo el panel se sitúa dentro de un layout con dos columnas y scroll general para que el área principal del visualizador utilice el 100 % del espacio disponible, igual que el resto de las subpestañas de *Corte*.
+- La pestaña principal “Cortar visualizador” genera únicamente la animación de onda (sin overlay) usando el audio del video seleccionado, acepta inicio/duración del segmento y deja el MP4 listo en `output/.../visualizador` para reutilizar en otras composiciones.
+- Durante la generación se divide el audio en segmentos de ~1 minuto, se crea cada visualizador parcial, se concatena secuencialmente y la UI actualiza una barra de estado (texto) que muestra cuántos segmentos ya se procesaron.
+
 ## Requisitos
 - Python 3.11+ (probado también en 3.13).
 - FFmpeg instalado y accesible desde `PATH`.
@@ -58,6 +65,8 @@ El programa inicia maximizado, mantiene las subpestañas fijas dentro de cada m�
 - Todos los archivos respetan el patrón `Nombre_parte_001.mp4`, `Nombre_parte_002.mp4`, etc., e incluyen metadatos en la nomenclatura para facilitar la organización.
 - Si activas la tarjeta final, el clip editado se concatena con la imagen + texto configurada, ajustando la duración de cierre automáticamente.
 
+## Publicar en Instagram
+- Consulta `docs/instagram_reel_upload.md` para ver el flujo manual y vía API (permiso, contenedores, enlaces oficiales) antes de subir Reels.
 ## Resolución rápida de problemas
 - Si FFmpeg no responde, confirma que existe en `PATH` y que el ejecutable es accesible desde la terminal del entorno virtual.
 - Si la generación de SRT falla, verifica codecs de audio, niveles de ruido o duración excesiva de silencio.
