@@ -5,9 +5,10 @@ from typing import Any
 
 import requests
 
+from core.api_endpoints import get_primary_endpoint_url
 from core.youtube_upload import obtener_token_activo
 
-YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
+YOUTUBE_API_BASE = get_primary_endpoint_url("YouTube Data")
 
 
 def _parse_duration(duration: str) -> float:

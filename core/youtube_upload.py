@@ -10,9 +10,9 @@ from typing import Callable, Iterable, List, Optional
 import requests
 
 from core.youtube_credentials import YouTubeCredentials, load_active_credentials
+from core.api_endpoints import get_all_endpoint_urls
 
-UPLOAD_INIT_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
-THUMBNAIL_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
+UPLOAD_INIT_URL, THUMBNAIL_UPLOAD_URL = get_all_endpoint_urls("YouTube upload")
 CHUNK_SIZE = 256 * 1024
 _token_lock = threading.Lock()
 _token_cache: dict[str, object] = {}

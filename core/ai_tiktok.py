@@ -5,8 +5,9 @@ import requests
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+from core.api_endpoints import get_primary_endpoint_url
 
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_API_URL = get_primary_endpoint_url("OpenAI Chat")
 
 # Cargar variables desde .env si existe
 load_dotenv()

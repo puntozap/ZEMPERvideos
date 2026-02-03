@@ -29,5 +29,13 @@ def create_state():
         "sub_state": {"videos": [], "srts": []},
         "ai_state": {"srt": None},
         "youtube_state": {"last_video_id": None},
+        "whatsapp_state": {"numbers": [], "media_path": "", "messages": []},
+        "drive_state": {
+            "service_json": "",
+            "status": "No configurado",
+            "oauth_client_secret": "",
+            "oauth_status": "OAuth no conectado",
+            "folder_id": "",
+        },
         "stop_control": stop_control,
     }

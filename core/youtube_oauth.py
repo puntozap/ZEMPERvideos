@@ -4,8 +4,10 @@ import urllib.parse
 
 import requests
 
-TOKEN_URL = "https://oauth2.googleapis.com/token"
-AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+from core.api_endpoints import get_primary_endpoint_url
+
+TOKEN_URL = get_primary_endpoint_url("YouTube token refresh")
+AUTH_BASE_URL = get_primary_endpoint_url("YouTube OAuth")
 
 
 def build_oauth_url(client_id: str, redirect_uri: str, scopes: list[str]) -> str:

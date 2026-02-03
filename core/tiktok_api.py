@@ -11,11 +11,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
+from core.api_endpoints import get_all_endpoint_urls
 
-AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/"
-TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
-INBOX_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/"
-DIRECT_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+AUTH_URL, TOKEN_URL = get_all_endpoint_urls("TikTok OAuth")
+INBOX_INIT_URL, DIRECT_INIT_URL = get_all_endpoint_urls("TikTok upload init")
 TOKENS_PATH = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "output", "tiktok_tokens.json"))
 
 

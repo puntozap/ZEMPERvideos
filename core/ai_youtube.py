@@ -3,22 +3,19 @@ import re
 import requests
 from dotenv import load_dotenv
 
-from core.extractor import extraer_audio
-from core.transcriber import transcribir, transcribir_srt
-from core.utils import (
-    output_base_dir,
-    output_subtitulados_dir,
-    obtener_duracion_segundos,
+from core.video_transcription import (
+    MAX_TRANSCRIPTION_CHARS,
+    extraer_audio_y_subtitulos,
+    obtener_transcripcion_para_video,
 )
 from core.youtube_upload import YouTubeUploadError, upload_video
+from core.api_endpoints import get_primary_endpoint_url
 
 MAX_METADATA_ATTEMPTS = 3
-MAX_TRANSCRIPTION_CHARS = 9000
-DEFAULT_SRT_MODEL = "base"
 
 load_dotenv()
 
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_API_URL = get_primary_endpoint_url("OpenAI Chat")
 
 
 def _fetch_api_key(provided: str | None) -> str:
@@ -56,58 +53,6 @@ def _parse_response(content: str) -> dict[str, str]:
     return fields
 
 
-def _obtener_transcripcion_para_youtube(
-    video_path: str, idioma: str, logs=None, max_chars: int = MAX_TRANSCRIPTION_CHARS
-) -> str:
-    if logs:
-        logs("Transcribiendo video para IA...")
-    texto = transcribir(video_path, idioma=idioma, model_size="small")
-    if not texto:
-        raise RuntimeError("La transcripción no devolvió texto válido.")
-    if len(texto) > max_chars:
-        if logs:
-            logs(f"Transcripción truncada a {max_chars} caracteres.")
-        texto = texto[:max_chars]
-    return texto
-
-
-def _extraer_audio_y_subtitulos(
-    video_path: str,
-    idioma: str,
-    logs=None,
-    model_size: str = DEFAULT_SRT_MODEL,
-) -> tuple[str, str | None]:
-    base_dir = output_base_dir(video_path)
-    audio_dir = os.path.join(base_dir, "audios")
-    os.makedirs(audio_dir, exist_ok=True)
-    video_name = os.path.splitext(os.path.basename(video_path))[0]
-    safe_name = re.sub(r"[<>:\"/\\|?*]", "_", video_name)
-    audio_name = f"{safe_name}_youtube_audio.mp3"
-    audio_path = os.path.join(audio_dir, audio_name)
-    if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
-        if logs:
-            logs(f"Usando audio existente para subtítulos: {audio_path}")
-    else:
-        extraer_audio(video_path, audio_path, log_fn=logs)
-
-    subs_dir = output_subtitulados_dir(video_path)
-    os.makedirs(subs_dir, exist_ok=True)
-    srt_path = None
-    try:
-        srt_path = transcribir_srt(
-            audio_path,
-            subs_dir,
-            idioma=idioma,
-            model_size=model_size,
-        )
-        if logs:
-            logs(f"SRT generado: {srt_path}")
-    except Exception as exc:
-        if logs:
-            logs(f"Advertencia: no se pudo generar el SRT ({exc})")
-    return audio_path, srt_path
-
-
 def generar_textos_youtube(
     video_path: str,
     api_key: str | None = None,
@@ -123,7 +68,7 @@ def generar_textos_youtube(
         raise RuntimeError("Falta la API key de OpenAI (OPENAI_API_KEY).")
     max_chars = MAX_TRANSCRIPTION_CHARS
     if texto is None:
-        texto = _obtener_transcripcion_para_youtube(video_path, idioma, logs=logs, max_chars=max_chars)
+        texto = obtener_transcripcion_para_video(video_path, idioma, logs=logs, max_chars=max_chars)
     else:
         if logs:
             logs("Usando transcripción existente para IA...")
@@ -190,8 +135,8 @@ def subir_video_youtube_desde_ia(
     fallback_title = os.path.splitext(os.path.basename(video_path))[0]
     duration = obtener_duracion_segundos(video_path)
     is_short = duration <= 60
-    texto_base = _obtener_transcripcion_para_youtube(video_path, idioma, logs=log_fn)
-    _extraer_audio_y_subtitulos(video_path, idioma, logs=log_fn)
+    texto_base = obtener_transcripcion_para_video(video_path, idioma, logs=log_fn)
+    extraer_audio_y_subtitulos(video_path, idioma, logs=log_fn)
 
     for intento in range(1, attempts + 1):
         if log_fn:

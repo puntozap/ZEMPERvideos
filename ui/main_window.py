@@ -1,25 +1,29 @@
 import os
+import tkinter as tk
 import customtkinter as ctk
 import winsound
+from core.drive_config import get_drive_folder_id
 from ui.shared import helpers
 from ui.shared.state import create_state
 from ui.shared.preview import create_subtitle_preview
 from core.workflow import generar_visualizador_solo
 from ui.tabs import (
-    corte_tab,
-    corte_individual_tab,
-    corte_visualizer_tab,
-    pegar_visualizador_tab,
+    actividad_tab,
+    audio_tab,
     cortar_visualizador_tab,
-    srt_tab,
-    subtitular_tab,
+    corte_individual_tab,
+    corte_tab,
+    corte_visualizer_tab,
+    drive_config_tab,
     ia_clips_tab,
     ia_tiktok_tab,
-    audio_tab,
+    pegar_visualizador_tab,
+    srt_tab,
+    subtitular_tab,
+    whatsapp_tab,
     youtube_mp3_tab,
     youtube_mp4_tab,
     youtube_upload_tab,
-    actividad_tab,
 )
 
 
@@ -46,7 +50,17 @@ def iniciar_app(procesar_video_fn):
     sub_state = shared_state["sub_state"]
     ai_state = shared_state["ai_state"]
     youtube_state = shared_state["youtube_state"]
+    whatsapp_state = shared_state["whatsapp_state"]
+    drive_state = shared_state["drive_state"]
     stop_control = shared_state["stop_control"]
+    folder_initial = get_drive_folder_id() or drive_state.get("folder_id", "")
+    drive_folder_var = tk.StringVar(value=folder_initial.strip())
+    drive_state["folder_id"] = drive_folder_var.get().strip()
+
+    def _sync_drive_folder(*_):
+        drive_state["folder_id"] = drive_folder_var.get().strip()
+
+    drive_folder_var.trace_add("write", _sync_drive_folder)
 
     def log(msg):
         helpers.log_to_widget(log_state["widget"], msg)
@@ -119,7 +133,9 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Subtitulos")
     tabs.add("IA generadores")
     tabs.add("Descargas")
+    tabs.add("Drive")
     tabs.add("YouTube")
+    tabs.add("WhatsApp")
     tabs.add("Actividad")
 
     tab_corte_main = tabs.tab("Corte")
@@ -127,7 +143,9 @@ def iniciar_app(procesar_video_fn):
     tab_sub_main = tabs.tab("Subtitulos")
     tab_ia_main = tabs.tab("IA generadores")
     tab_desc_main = tabs.tab("Descargas")
+    tab_drive_main = tabs.tab("Drive")
     tab_youtube_main = tabs.tab("YouTube")
+    tab_whatsapp_main = tabs.tab("WhatsApp")
     tab_act = tabs.tab("Actividad")
 
     corte_tabs = ctk.CTkTabview(tab_corte_main, corner_radius=10)
@@ -309,6 +327,21 @@ def iniciar_app(procesar_video_fn):
         "log_global": log,
         "stop_control": stop_control,
         "youtube_state": youtube_state,
+    })
+
+    drive_config_tab.create_tab(tab_drive_main, {
+        "log_global": log,
+        "stop_control": stop_control,
+        "drive_state": drive_state,
+        "drive_folder_var": drive_folder_var,
+    })
+
+    whatsapp_tab.create_tab(tab_whatsapp_main, {
+        "log": log,
+        "log_global": log,
+        "stop_control": stop_control,
+        "whatsapp_state": whatsapp_state,
+        "drive_folder_var": drive_folder_var,
     })
 
     actividad_tab.create_tab(tab_act, {
