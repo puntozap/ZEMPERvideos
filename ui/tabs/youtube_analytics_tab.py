@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 import threading
 import webbrowser
+import re
 
 import customtkinter as ctk
 import tkinter as tk
@@ -14,6 +15,8 @@ from core.youtube_api import (
     listar_comentarios_video,
     obtener_videos_mas_comentados,
 )
+from core.google_drive import create_google_doc_from_text
+from core.youtube_docs import generar_subtitulos_por_minuto_desde_youtube
 from ui.shared import helpers
 from ui.shared.tooltip import Tooltip
 
@@ -30,6 +33,19 @@ def _truncate(text: str, max_len: int = 70) -> str:
     if len(s) <= max_len:
         return s
     return s[: max_len - 3] + "..."
+
+
+def _parse_emails(value: str) -> list[str]:
+    raw = (value or "").strip()
+    if not raw:
+        return []
+
+    # Accept comma/semicolon/newline separated lists (users often paste from other apps).
+    emails = [e.strip() for e in re.split(r"[,\n;]+", raw) if e.strip()]
+
+    # Simple validation; good enough for UI feedback (not RFC-complete).
+    pattern = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    return [e for e in emails if pattern.match(e)]
 
 
 def create_tab(parent, context):
@@ -207,22 +223,36 @@ def create_tab(parent, context):
         row=2, column=0, sticky="w", padx=12, pady=(0, 10)
     )
 
+    doc_row = ctk.CTkFrame(details, fg_color="transparent")
+    doc_row.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 10))
+    doc_row.grid_columnconfigure(1, weight=1)
+    share_var = tk.StringVar(value="")
+    ctk.CTkLabel(doc_row, text="Compartir:", text_color="#9aa4b2").grid(row=0, column=0, sticky="w")
+    share_entry = ctk.CTkEntry(doc_row, textvariable=share_var, placeholder_text="emails separados por coma")
+    share_entry.grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    btn_doc = ctk.CTkButton(doc_row, text="Crear Google Doc", width=160)
+    btn_doc.grid(row=0, column=2, sticky="e")
+
     decision_box = ctk.CTkTextbox(details, height=120, corner_radius=8)
-    decision_box.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 10))
+    decision_box.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 10))
     decision_box.configure(state="disabled")
 
     geo_box = ctk.CTkTextbox(details, height=140, corner_radius=8)
-    geo_box.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 10))
+    geo_box.grid(row=5, column=0, sticky="ew", padx=12, pady=(0, 10))
     geo_box.configure(state="disabled")
 
     comments_box = ctk.CTkTextbox(details, height=520, corner_radius=8)
-    comments_box.grid(row=5, column=0, sticky="nsew", padx=12, pady=(0, 12))
+    comments_box.grid(row=6, column=0, sticky="nsew", padx=12, pady=(0, 12))
     comments_box.configure(state="disabled")
 
     selected_video_id: str | None = None
     video_items: list[dict] = []
     list_buttons: list[ctk.CTkButton] = []
     comments_period_map: dict[str, int] = {}
+    last_stats: dict | None = None
+    last_countries: list[dict] | None = None
+    last_comments: list[dict] | None = None
+    last_decision: str = ""
 
     def _set_box(box: ctk.CTkTextbox, text: str) -> None:
         box.configure(state="normal")
@@ -233,6 +263,8 @@ def create_tab(parent, context):
 
     def _set_decision(text: str) -> None:
         _set_box(decision_box, text)
+        nonlocal last_decision
+        last_decision = text
 
     def _render_list() -> None:
         for btn in list_buttons:
@@ -307,6 +339,8 @@ def create_tab(parent, context):
             log(f"Consultando detalles: {vid}")
 
             stats = obtener_estadisticas_video(vid, log_fn=log)
+            nonlocal last_stats
+            last_stats = stats
             stats_var.set(
                 f"Views: {stats.get('view_count', 0)} | Likes: {stats.get('like_count', 0)} | Comments: {stats.get('comment_count', 0)}"
             )
@@ -353,6 +387,8 @@ def create_tab(parent, context):
                 for entry in countries:
                     geo_lines.append(f"- {entry.get('country')}: {entry.get('views')}")
             _set_box(geo_box, "\n".join(geo_lines))
+            nonlocal last_countries
+            last_countries = countries
 
             limit = _safe_int(comments_limit_var.get(), 20)
             include_replies = bool(include_replies_var.get())
@@ -368,6 +404,8 @@ def create_tab(parent, context):
                 end_date=end_var.get(),
                 log_fn=log,
             )
+            nonlocal last_comments
+            last_comments = comments
             comment_lines = ["== Comentarios =="]
             if not comments:
                 comment_lines.append("(sin comentarios en este rango o deshabilitados)")
@@ -468,5 +506,111 @@ def create_tab(parent, context):
 
     btn_copy_titles.configure(command=_copy_titles)
     query_var.trace_add("write", lambda *_: _render_list())
+
+    def _build_doc_text() -> str:
+        vid = selected_video_id or ""
+        title = selected_title_var.get()
+        link = link_var.get()
+        start = start_var.get()
+        end = end_var.get()
+
+        lines: list[str] = []
+        lines.append("Reporte de comentarios (YouTube)")
+        lines.append("")
+        lines.append(f"Video: {title}")
+        if link:
+            lines.append(f"Link: {link}")
+        lines.append(f"Rango: {start} a {end}")
+        lines.append("")
+        if last_stats:
+            lines.append("Estadisticas")
+            lines.append(f"- Views: {last_stats.get('view_count', 0)}")
+            lines.append(f"- Likes: {last_stats.get('like_count', 0)}")
+            lines.append(f"- Comentarios totales: {last_stats.get('comment_count', 0)}")
+            lines.append("")
+        if last_decision:
+            lines.append(last_decision.strip())
+            lines.append("")
+        lines.append("Vistas por pais (top 10)")
+        countries = last_countries or []
+        if not countries:
+            lines.append("(sin datos)")
+        else:
+            for entry in countries:
+                lines.append(f"- {entry.get('country')}: {entry.get('views')}")
+        lines.append("")
+        lines.append("Comentarios (filtrados por rango)")
+        comments = last_comments or []
+        if not comments:
+            lines.append("(sin comentarios en este rango o deshabilitados)")
+        else:
+            for idx, c in enumerate(comments, start=1):
+                author = c.get("author") or ""
+                published = c.get("published_at") or ""
+                text = (c.get("text") or "").strip()
+                lines.append(f"{idx}. {author} ({published})")
+                lines.append(text)
+                lines.append("")
+        return "\n".join(lines).strip() + "\n"
+
+    def _create_google_doc() -> None:
+        if not selected_video_id:
+            log("Selecciona un video primero.")
+            return
+        if stop_control and stop_control.is_busy():
+            log("Ya hay un proceso en curso.")
+            return
+        if stop_control:
+            stop_control.clear_stop()
+            stop_control.set_busy(True)
+        try:
+            emails = _parse_emails(share_var.get())
+            if not emails:
+                log("Ingresa al menos un correo válido en 'Compartir' (separados por coma).")
+                return
+            doc_title = f"Reporte comentarios - {selected_title_var.get()[:80]}"
+            content = _build_doc_text()
+
+            # Append subtitles transcription per minute (can take time).
+            link = link_var.get().strip()
+            if link:
+                log("Generando subtitulos (por minuto) para el Google Doc...")
+                try:
+                    subs = generar_subtitulos_por_minuto_desde_youtube(
+                        link,
+                        segundos_por_parte=60,
+                        idioma="es",
+                        model_size="base",
+                        log_fn=log,
+                    )
+                except Exception as exc:
+                    log(f"No se pudieron generar subtitulos: {exc}")
+                    subs = ""
+                if subs:
+                    content = content.rstrip() + "\n\n" + subs
+
+            _file_id, url = create_google_doc_from_text(
+                title=doc_title,
+                content=content,
+                share_anyone=True,
+                share_emails=emails,
+                share_role="writer",
+            )
+            log(f"Google Doc creado: {url}")
+            try:
+                parent.clipboard_clear()
+                parent.clipboard_append(url)
+                parent.update_idletasks()
+                log("Link copiado al portapapeles.")
+            except Exception:
+                pass
+            webbrowser.open(url)
+        except Exception as exc:
+            log(f"Error creando Google Doc: {exc}")
+        finally:
+            if stop_control:
+                stop_control.set_busy(False)
+
+    btn_doc.configure(command=lambda: threading.Thread(target=_create_google_doc, daemon=True).start())
 
     return {"load_videos": _load_videos, "refresh": _refresh_selected}

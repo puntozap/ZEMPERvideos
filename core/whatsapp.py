@@ -182,8 +182,21 @@ def _upload_to_fileio(path: str, logs=None) -> str:
             timeout=120,
         )
     response.raise_for_status()
-    payload = response.json()
-    link = payload.get("link") or payload.get("data", {}).get("link") or payload.get("url")
+    try:
+        payload = response.json()
+    except Exception:
+        # file.io sometimes responds with non-JSON (HTML/text) depending on region/rate limits.
+        preview = (response.text or "").strip().replace("\n", " ")[:240]
+        if logs:
+            logs(f"file.io respuesta no-JSON (status {response.status_code}): {preview}")
+        match = re.search(r"https?://\\S+", response.text or "")
+        if match:
+            link = match.group(0).strip()
+            if logs:
+                logs(f"URL detectada en respuesta file.io: {link}")
+            return link
+        raise RuntimeError("file.io devolvió una respuesta inválida (no JSON).")
+    link = payload.get("link") or (payload.get("data") or {}).get("link") or payload.get("url")
     if not link:
         raise RuntimeError("file.io no devolvió una URL.")
     if logs:

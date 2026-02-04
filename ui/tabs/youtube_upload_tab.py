@@ -20,7 +20,9 @@ from core.youtube_oauth import build_oauth_url, exchange_code_for_tokens
 from core.youtube_upload import YouTubeUploadError, upload_video, set_thumbnail
 from core.utils import obtener_duracion_segundos
 from core.ai_youtube import generar_textos_youtube
+from core.ai_youtube import subir_video_youtube_desde_ia
 from ui.dialogs import mostrar_error, mostrar_info, seleccionar_archivo
+from ui.dialogs import seleccionar_archivos
 from ui.shared import helpers
 from core.oauth_redirect_server import (
     CALLBACK_FILE,
@@ -170,11 +172,13 @@ def create_tab(parent, context):
     tabview.add("¿Qué es?")
     tabview.add("Configuración")
     tabview.add("Subir video")
+    tabview.add("Subir lote")
     tabview.add("Miniatura")
 
     about_tab = tabview.tab("¿Qué es?")
     config_tab = tabview.tab("Configuración")
     upload_tab = tabview.tab("Subir video")
+    bulk_tab = tabview.tab("Subir lote")
     thumbnail_tab = tabview.tab("Miniatura")
     def _create_tab_body(tab_frame):
         tab_frame.grid_columnconfigure(0, weight=1)
@@ -187,6 +191,7 @@ def create_tab(parent, context):
     about_body = _create_tab_body(about_tab)
     config_body = _create_tab_body(config_tab)
     upload_body = _create_tab_body(upload_tab)
+    bulk_body = _create_tab_body(bulk_tab)
     thumbnail_body = _create_tab_body(thumbnail_tab)
 
     status_var = tk.StringVar(value="Cargando credenciales...")
@@ -781,6 +786,398 @@ def create_tab(parent, context):
     ctk.CTkButton(upload_body, text="Subir video", command=subir_video, height=44).grid(
         row=upload_row_index, column=0, sticky="ew", pady=(8, 0), padx=(4, 0)
     )
+
+    # ------------------------------
+    # Subir lote
+    # ------------------------------
+    bulk_files: list[Path] = []
+    bulk_status: dict[str, str] = {}
+    bulk_video_ids: dict[str, str] = {}
+
+    bulk_privacy_var = tk.StringVar(value=privacy_var.get())
+    privacy_var.trace_add("write", lambda *_: bulk_privacy_var.set(privacy_var.get()))
+
+    bulk_max_upload_var = tk.StringVar(value="0")  # 0 = all
+    bulk_title_prefix_var = tk.StringVar(value="")
+    bulk_tags_var = tk.StringVar(value="")
+    bulk_short_mode_var = tk.StringVar(value="Auto")  # Auto / Short / Normal
+    bulk_use_ai_var = tk.BooleanVar(value=False)
+    bulk_model_var = tk.StringVar(value=model_text_var.get())
+
+    bulk_header = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_header.grid(row=0, column=0, sticky="ew", padx=(4, 0), pady=(4, 8))
+    bulk_header.grid_columnconfigure(7, weight=1)
+
+    ctk.CTkButton(
+        bulk_header,
+        text="Agregar videos",
+        command=lambda: _bulk_add_files(),
+        height=32,
+    ).grid(row=0, column=0, sticky="w")
+
+    btn_bulk_remove = ctk.CTkButton(
+        bulk_header,
+        text="Quitar seleccion",
+        command=lambda: _bulk_remove_selected(),
+        height=32,
+        width=140,
+    )
+    btn_bulk_remove.grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    ctk.CTkButton(
+        bulk_header,
+        text="Limpiar",
+        command=lambda: _bulk_clear(),
+        height=32,
+        width=100,
+    ).grid(row=0, column=2, sticky="w", padx=(8, 0))
+
+    ctk.CTkLabel(bulk_header, text="Privacidad:", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=3, sticky="e", padx=(16, 4)
+    )
+    ctk.CTkOptionMenu(
+        bulk_header,
+        values=["public", "unlisted", "private"],
+        variable=bulk_privacy_var,
+        width=130,
+    ).grid(row=0, column=4, sticky="w")
+
+    ctk.CTkLabel(bulk_header, text="Max:", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=5, sticky="e", padx=(16, 4)
+    )
+    ctk.CTkEntry(bulk_header, textvariable=bulk_max_upload_var, width=80).grid(
+        row=0, column=6, sticky="w"
+    )
+
+    btn_bulk_start = ctk.CTkButton(
+        bulk_header,
+        text="Subir lote",
+        command=lambda: _bulk_start_upload(),
+        height=32,
+        width=140,
+    )
+    btn_bulk_start.grid(row=0, column=8, sticky="e", padx=(8, 0))
+
+    btn_bulk_stop = ctk.CTkButton(
+        bulk_header,
+        text="Detener",
+        command=lambda: _bulk_stop(),
+        height=32,
+        width=120,
+    )
+    btn_bulk_stop.grid(row=0, column=9, sticky="e", padx=(8, 0))
+
+    bulk_settings = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_settings.grid(row=1, column=0, sticky="ew", padx=(4, 0), pady=(0, 8))
+    bulk_settings.grid_columnconfigure(1, weight=1)
+    bulk_settings.grid_columnconfigure(3, weight=1)
+
+    ctk.CTkLabel(bulk_settings, text="Prefijo titulo", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+    ctk.CTkEntry(bulk_settings, textvariable=bulk_title_prefix_var).grid(
+        row=0, column=1, sticky="ew", padx=(8, 12)
+    )
+
+    ctk.CTkLabel(bulk_settings, text="Tags (CSV)", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=2, sticky="w"
+    )
+    ctk.CTkEntry(bulk_settings, textvariable=bulk_tags_var).grid(
+        row=0, column=3, sticky="ew", padx=(8, 0)
+    )
+
+    bulk_settings2 = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_settings2.grid(row=2, column=0, sticky="ew", padx=(4, 0), pady=(0, 8))
+    bulk_settings2.grid_columnconfigure(5, weight=1)
+
+    ctk.CTkLabel(bulk_settings2, text="Shorts", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+    ctk.CTkOptionMenu(
+        bulk_settings2,
+        values=["Auto", "Short", "Normal"],
+        variable=bulk_short_mode_var,
+        width=120,
+    ).grid(row=0, column=1, sticky="w", padx=(8, 0))
+
+    ctk.CTkSwitch(
+        bulk_settings2,
+        text="Usar IA (lento)",
+        variable=bulk_use_ai_var,
+    ).grid(row=0, column=2, sticky="w", padx=(16, 0))
+
+    ctk.CTkLabel(bulk_settings2, text="Modelo IA", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=3, sticky="e", padx=(16, 4)
+    )
+    ctk.CTkOptionMenu(
+        bulk_settings2,
+        values=["gpt-4o-mini", "gpt-4o"],
+        variable=bulk_model_var,
+        width=140,
+    ).grid(row=0, column=4, sticky="w")
+
+    ctk.CTkLabel(
+        bulk_settings2,
+        text="Tip: deja IA apagada si solo vas a subir partes ya listas.",
+        font=ctk.CTkFont(size=11),
+        text_color="#9aa4b2",
+    ).grid(row=0, column=5, sticky="e")
+
+    bulk_desc_frame = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_desc_frame.grid(row=3, column=0, sticky="nsew", padx=(4, 0), pady=(0, 8))
+    bulk_desc_frame.grid_columnconfigure(0, weight=1)
+    ctk.CTkLabel(bulk_desc_frame, text="Descripcion (opcional)", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+    bulk_desc_box = ctk.CTkTextbox(bulk_desc_frame, height=90, corner_radius=8)
+    bulk_desc_box.configure(wrap="word")
+    bulk_desc_box.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+    bulk_desc_box.insert("end", "Subido con Transcriptor de Video.")
+
+    bulk_list_frame = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_list_frame.grid(row=4, column=0, sticky="nsew", padx=(4, 0), pady=(0, 8))
+    bulk_list_frame.grid_columnconfigure(0, weight=1)
+    bulk_list_frame.grid_rowconfigure(1, weight=1)
+
+    bulk_count_var = tk.StringVar(value="0 videos en cola")
+    ctk.CTkLabel(bulk_list_frame, textvariable=bulk_count_var, font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+
+    # tk.Listbox is used for selection (remove selected, etc.)
+    bulk_list_container = ctk.CTkFrame(bulk_list_frame, corner_radius=8)
+    bulk_list_container.grid(row=1, column=0, sticky="nsew", pady=(6, 0))
+    bulk_list_container.grid_columnconfigure(0, weight=1)
+    bulk_list_container.grid_rowconfigure(0, weight=1)
+
+    bulk_listbox = tk.Listbox(
+        bulk_list_container,
+        selectmode=tk.EXTENDED,
+        activestyle="none",
+        height=10,
+    )
+    bulk_scrollbar = tk.Scrollbar(bulk_list_container, orient="vertical", command=bulk_listbox.yview)
+    bulk_listbox.configure(yscrollcommand=bulk_scrollbar.set)
+    bulk_listbox.grid(row=0, column=0, sticky="nsew")
+    bulk_scrollbar.grid(row=0, column=1, sticky="ns")
+
+    bulk_selected_path_var = tk.StringVar(value="")
+    bulk_selected_link_var = tk.StringVar(value="")
+
+    bulk_selected = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_selected.grid(row=5, column=0, sticky="ew", padx=(4, 0), pady=(0, 8))
+    bulk_selected.grid_columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(bulk_selected, text="Seleccion:", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+    ctk.CTkEntry(bulk_selected, textvariable=bulk_selected_path_var, state="readonly").grid(
+        row=0, column=1, sticky="ew", padx=(8, 8)
+    )
+    ctk.CTkButton(
+        bulk_selected,
+        text="Abrir",
+        width=120,
+        command=lambda: webbrowser.open(bulk_selected_link_var.get())
+        if bulk_selected_link_var.get()
+        else None,
+    ).grid(row=0, column=2, sticky="e")
+
+    bulk_results_frame = ctk.CTkFrame(bulk_body, fg_color="transparent")
+    bulk_results_frame.grid(row=6, column=0, sticky="nsew", padx=(4, 0), pady=(0, 8))
+    bulk_results_frame.grid_columnconfigure(0, weight=1)
+    ctk.CTkLabel(bulk_results_frame, text="Resultados", font=ctk.CTkFont(size=12)).grid(
+        row=0, column=0, sticky="w"
+    )
+    bulk_results_box = ctk.CTkTextbox(bulk_results_frame, height=120, corner_radius=8)
+    bulk_results_box.configure(wrap="none")
+    bulk_results_box.grid(row=1, column=0, sticky="nsew", pady=(4, 0))
+
+    def _bulk_refresh_listbox():
+        bulk_listbox.delete(0, "end")
+        for path in bulk_files:
+            key = str(path)
+            status = bulk_status.get(key, "")
+            prefix = f"[{status}] " if status else ""
+            bulk_listbox.insert("end", f"{prefix}{path.name}")
+        bulk_count_var.set(f"{len(bulk_files)} videos en cola")
+
+    def _bulk_set_status(path: Path, status: str):
+        bulk_status[str(path)] = status
+        _bulk_refresh_listbox()
+
+    def _bulk_append_result(line: str):
+        bulk_results_box.insert("end", (line.rstrip() + "\n"))
+        bulk_results_box.see("end")
+
+    def _bulk_add_files():
+        paths = seleccionar_archivos(
+            "Seleccionar videos para subir (lote)",
+            [("Videos", "*.mp4;*.mkv;*.mov;*.avi;*.flv;*.webm"), ("Todos", "*.*")],
+        )
+        if not paths:
+            return
+        added = 0
+        for raw in paths:
+            p = Path(raw)
+            if p not in bulk_files:
+                bulk_files.append(p)
+                added += 1
+        if added:
+            log(f"Agregados al lote: {added}")
+        _bulk_refresh_listbox()
+
+    def _bulk_remove_selected():
+        selection = list(bulk_listbox.curselection())
+        if not selection:
+            return
+        # Remove from the end so indices remain stable.
+        for idx in sorted(selection, reverse=True):
+            if 0 <= idx < len(bulk_files):
+                removed = bulk_files.pop(idx)
+                bulk_status.pop(str(removed), None)
+                bulk_video_ids.pop(str(removed), None)
+        _bulk_refresh_listbox()
+
+    def _bulk_clear():
+        bulk_files.clear()
+        bulk_status.clear()
+        bulk_video_ids.clear()
+        bulk_selected_path_var.set("")
+        bulk_selected_link_var.set("")
+        bulk_results_box.delete("1.0", "end")
+        _bulk_refresh_listbox()
+
+    def _bulk_stop():
+        if stop_control:
+            stop_control.request_stop()
+        log("Solicitud de detener enviada.")
+
+    def _bulk_short_flag_for_path(path: Path) -> bool:
+        mode = (bulk_short_mode_var.get() or "Auto").strip()
+        if mode == "Short":
+            return True
+        if mode == "Normal":
+            return False
+        # Auto
+        try:
+            seconds = obtener_duracion_segundos(str(path))
+        except Exception:
+            # If duration can't be read, don't force short.
+            return False
+        return seconds <= 60
+
+    def _bulk_clean_title(name: str) -> str:
+        text = (name or "").strip()
+        if not text:
+            return "Sin titulo"
+        return re.sub(r"[_\s]+", " ", text).strip()
+
+    def _bulk_start_upload():
+        if not bulk_files:
+            mostrar_error("No hay videos en la lista.")
+            return
+        if stop_control and stop_control.is_busy():
+            mostrar_error("Ya hay un proceso en curso.")
+            return
+        try:
+            max_value = int((bulk_max_upload_var.get() or "0").strip())
+        except ValueError:
+            mostrar_error("Max debe ser un numero (0 = todos).")
+            return
+        files_to_upload = list(bulk_files)
+        if max_value > 0:
+            files_to_upload = files_to_upload[:max_value]
+
+        if stop_control:
+            stop_control.clear_stop()
+            stop_control.set_busy(True)
+
+        helpers.log_seccion(log, None, "YouTube lote")
+        log(f"Videos en cola: {len(files_to_upload)} (de {len(bulk_files)}).")
+
+        def _ui(fn):
+            parent.after(0, fn)
+
+        def worker():
+            try:
+                for idx, path in enumerate(files_to_upload, start=1):
+                    if stop_control and stop_control.should_stop():
+                        log("Proceso detenido por el usuario.")
+                        break
+
+                    if not path.exists():
+                        log(f"[{idx}] No existe: {path}")
+                        _ui(lambda p=path: _bulk_set_status(p, "MISSING"))
+                        continue
+
+                    _ui(lambda p=path: _bulk_set_status(p, "SUBIENDO"))
+                    log(f"[{idx}/{len(files_to_upload)}] Subiendo: {path.name}")
+
+                    try:
+                        if bulk_use_ai_var.get():
+                            result = subir_video_youtube_desde_ia(
+                                str(path),
+                                model=bulk_model_var.get(),
+                                idioma="es",
+                                privacy=bulk_privacy_var.get(),
+                                log_fn=log,
+                            )
+                            video_id = result.get("video_id", "")
+                        else:
+                            prefix = bulk_title_prefix_var.get().strip()
+                            title = _bulk_clean_title(path.stem)
+                            if prefix:
+                                title = f"{prefix} {title}".strip()
+                            description = bulk_desc_box.get("1.0", "end").strip()
+                            if not description:
+                                description = title
+                            tags_text = bulk_tags_var.get().strip() or entry_tags.get().strip()
+                            tags_list = [t.strip() for t in tags_text.split(",") if t.strip()]
+                            video_id = upload_video(
+                                path,
+                                title,
+                                description,
+                                tags_list,
+                                privacy=bulk_privacy_var.get(),
+                                is_short=_bulk_short_flag_for_path(path),
+                                log_fn=log,
+                            )
+
+                        if video_id:
+                            youtube_state["last_video_id"] = video_id
+                            bulk_video_ids[str(path)] = video_id
+                            url = f"https://youtu.be/{video_id}"
+                            _ui(lambda p=path: _bulk_set_status(p, "OK"))
+                            _ui(lambda u=url: _bulk_append_result(u))
+                            log(f"OK: {url}")
+                        else:
+                            _ui(lambda p=path: _bulk_set_status(p, "ERR"))
+                            log("Error: no se recibió video_id.")
+                    except Exception as exc:
+                        _ui(lambda p=path: _bulk_set_status(p, "ERR"))
+                        helpers.log_seccion(log, None, "Error YouTube lote")
+                        log(f"Error subiendo {path.name}: {exc}")
+            finally:
+                if stop_control:
+                    stop_control.set_busy(False)
+                log("Lote finalizado.")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_bulk_select(_event=None):
+        selection = list(bulk_listbox.curselection())
+        if not selection:
+            bulk_selected_path_var.set("")
+            bulk_selected_link_var.set("")
+            return
+        path = bulk_files[selection[0]]
+        bulk_selected_path_var.set(str(path))
+        video_id = bulk_video_ids.get(str(path), "")
+        bulk_selected_link_var.set(f"https://youtu.be/{video_id}" if video_id else "")
+
+    bulk_listbox.bind("<<ListboxSelect>>", _on_bulk_select)
+    _bulk_refresh_listbox()
 
     thumbnail_path_var = tk.StringVar(value="Ninguna miniatura seleccionada")
 

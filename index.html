@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Editor de Video (Primer Video) — Landing Presentación</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Optional: Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
+
+    /* Smooth scrolling */
+    html { scroll-behavior: smooth; }
+
+    /* Fancy scrollbar */
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.35); }
+
+    /* Glass + blur support */
+    .glass {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    /* Gradient border trick */
+    .g-border {
+      position: relative;
+    }
+    .g-border::before {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: 1.5rem;
+      background: linear-gradient(135deg, rgba(99,102,241,0.55), rgba(34,211,238,0.45), rgba(168,85,247,0.45));
+      filter: blur(0.0px);
+      z-index: -1;
+      opacity: .55;
+    }
+
+    /* Reveal animation */
+    .reveal {
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Parallax layers */
+    .parallax-layer {
+      transform: translate3d(var(--tx, 0px), var(--ty, 0px), 0);
+      transition: transform .12s ease-out;
+      will-change: transform;
+    }
+
+    /* Sidebar active marker */
+    .nav-item[data-active="true"] .dot {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+    .nav-item[data-active="true"] .label {
+      opacity: 1;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-white overflow-x-hidden">
+  <!-- Background (parallax) -->
+  <div class="fixed inset-0 -z-10 overflow-hidden">
+    <!-- Base gradient -->
+    <div class="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950 to-black"></div>
+
+    <!-- Aurora blobs -->
+    <div id="p1" class="parallax-layer absolute -top-24 -left-24 h-[560px] w-[560px] rounded-full blur-3xl opacity-40"
+         style="background: radial-gradient(circle at 30% 30%, rgba(99,102,241,.7), rgba(99,102,241,0) 60%);"></div>
+
+    <div id="p2" class="parallax-layer absolute top-16 -right-32 h-[680px] w-[680px] rounded-full blur-3xl opacity-35"
+         style="background: radial-gradient(circle at 40% 30%, rgba(34,211,238,.7), rgba(34,211,238,0) 60%);"></div>
+
+    <div id="p3" class="parallax-layer absolute -bottom-40 left-1/3 h-[720px] w-[720px] rounded-full blur-3xl opacity-30"
+         style="background: radial-gradient(circle at 60% 40%, rgba(168,85,247,.7), rgba(168,85,247,0) 60%);"></div>
+
+    <!-- Subtle grid -->
+    <div class="absolute inset-0 opacity-[0.09]"
+      style="background-image:
+        linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px);
+        background-size: 60px 60px;"></div>
+
+    <!-- Vignette -->
+    <div class="absolute inset-0"
+      style="background: radial-gradient(circle at 50% 15%, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 55%, rgba(0,0,0,.85) 100%);"></div>
+  </div>
+
+  <!-- Top bar -->
+  <header class="sticky top-0 z-40">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
+      <!-- <div class="glass g-border rounded-3xl px-5 py-4 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-2xl grid place-items-center bg-white/10 border border-white/10">
+            
+            <svg class="h-5 w-5 opacity-90" viewBox="0 0 24 24" fill="none">
+              <path d="M8 5v14l11-7L8 5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="leading-tight">
+            <div class="text-sm opacity-70">Landing / Presentación</div>
+            <div class="font-semibold">“Soy editor de video… y este es mi primer video”</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnPresent" class="group rounded-2xl px-4 py-2 bg-white/10 hover:bg-white/14 border border-white/10 transition flex items-center gap-2">
+            <span class="text-sm font-semibold">Modo Presentación</span>
+            <span class="text-xs opacity-70 group-hover:opacity-90 transition">← →</span>
+          </button>
+
+          <a href="#cierre" class="rounded-2xl px-4 py-2 bg-gradient-to-r from-indigo-500/80 to-cyan-400/70 hover:from-indigo-500 hover:to-cyan-400 transition font-semibold text-sm">
+            Ir al cierre
+          </a>
+        </div>
+      </div> -->
+    </div>
+  </header>
+
+  <!-- Layout -->
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-24">
+    <div class="grid grid-cols-12 gap-6 mt-6">
+
+      <!-- Sidebar -->
+      <aside class="col-span-12 lg:col-span-4 xl:col-span-3">
+        <div class="lg:sticky lg:top-24">
+          <div class="glass g-border rounded-3xl p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xs tracking-wider uppercase opacity-70">Guion</div>
+                <div class="text-lg font-semibold mt-1">Puntos que voy a hablar</div>
+              </div>
+              <div class="text-xs opacity-60 leading-tight text-right">
+                <div>Click para navegar</div>
+                <div class="hidden sm:block">o usa ← →</div>
+              </div>
+            </div>
+
+            <nav class="mt-5">
+              <ul class="space-y-2">
+                <!-- nav items -->
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#intro" data-target="intro" data-active="true">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-indigo-400 opacity-70 transition"></span>
+                    <span class="label text-sm font-semibold opacity-90 group-hover:opacity-100 transition">Soy editor… y es mi primer video</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#que-es" data-target="que-es">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-cyan-300 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">Qué hace un editor de verdad</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#niveles" data-target="niveles">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-fuchsia-300 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">Rangos reales (y el momento incómodo)</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#tiempo" data-target="tiempo">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-emerald-300 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">El verdadero enemigo: el tiempo</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#flujo" data-target="flujo">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-amber-300 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">Cómo trabaja un editor (flujo real)</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#herramienta" data-target="herramienta">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-sky-300 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">La herramienta (el giro ingeniero)</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#ia" data-target="ia">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-indigo-200 opacity-50 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">IA: no reemplaza, acelera</span>
+                  </a>
+                </li>
+                <li>
+                  <a class="nav-item group flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-white/8 transition"
+                     href="#cierre" data-target="cierre">
+                    <span class="dot h-2.5 w-2.5 rounded-full bg-white opacity-40 transition"></span>
+                    <span class="label text-sm font-semibold opacity-70 group-hover:opacity-95 transition">Cierre (frase para cortar en Shorts)</span>
+                  </a>
+                </li>
+              </ul>
+            </nav>
+
+            <!-- mini footer -->
+            <div class="mt-6 rounded-2xl bg-white/5 border border-white/10 p-4">
+              <div class="text-xs opacity-70">Tip para grabar</div>
+              <div class="mt-1 text-sm font-semibold leading-snug">
+                Lee cada bloque como si fuera un Short: <span class="opacity-80">hook → idea → remate.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <main class="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6">
+
+        <!-- Hero / Intro -->
+        <section id="intro" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                  <span class="h-1.5 w-1.5 rounded-full bg-indigo-400"></span>
+                  Intro
+                </div>
+                <h1 class="mt-4 text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.05]">
+                  Soy editor de video…
+                  <span class="bg-gradient-to-r from-indigo-400 via-cyan-300 to-fuchsia-300 bg-clip-text text-transparent">
+                    y este es mi primer video
+                  </span>
+                </h1>
+                <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                  Sí, suena raro. A mí también me dio risa cuando lo dije en voz alta.
+                  Pero de esa frase salen más preguntas de las que parece… y de ahí nació todo esto.
+                </p>
+              </div>
+
+              <div class="hidden lg:block">
+                <div class="rounded-3xl bg-white/5 border border-white/10 p-4 w-64">
+                  <div class="text-xs opacity-70">Modo presentación</div>
+                  <div class="mt-1 text-sm font-semibold">Usa <span class="opacity-90">←</span> <span class="opacity-90">→</span> para avanzar</div>
+                  <div class="mt-3 text-xs opacity-70">Micro-CTA</div>
+                  <div class="mt-1 text-sm font-semibold">Cada sección está lista para recortarse en Shorts.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- CTA chips -->
+            <div class="flex flex-wrap gap-2">
+              <button class="chip group rounded-full px-4 py-2 bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-semibold"
+                      data-jump="#herramienta">
+                Ver la herramienta
+                <span class="opacity-60 group-hover:opacity-95 transition">→</span>
+              </button>
+              <button class="chip group rounded-full px-4 py-2 bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-semibold"
+                      data-jump="#niveles">
+                Rangos reales
+                <span class="opacity-60 group-hover:opacity-95 transition">→</span>
+              </button>
+              <button class="chip group rounded-full px-4 py-2 bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-semibold"
+                      data-jump="#cierre">
+                Frase final
+                <span class="opacity-60 group-hover:opacity-95 transition">→</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Qué es -->
+        <section id="que-es" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-cyan-300"></span>
+                Concepto
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                ¿Qué hace un editor <span class="opacity-75">de verdad</span>?
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                Un editor no es “cortar y pegar”.
+                Un editor toma material en bruto —video, audio, silencios, imágenes— y lo convierte en una pieza con intención,
+                ritmo y mensaje claro para una audiencia específica.
+              </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition group">
+                <div class="text-xs uppercase tracking-wider opacity-70">Lo que decide</div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Qué se ve y qué no</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Cuándo entra algo y cuándo se va</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Cómo se ordena el caos para que tenga sentido</li>
+                </ul>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition group">
+                <div class="text-xs uppercase tracking-wider opacity-70">Lo que provoca</div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Entender</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Engancharse</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Emocionarse / reflexionar / comprar</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-gradient-to-r from-indigo-500/20 via-cyan-400/10 to-fuchsia-500/20 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Frase para recortar</div>
+              <div class="mt-2 text-xl sm:text-2xl font-extrabold">
+                “Un editor no edita videos, edita tiempo.”
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Niveles -->
+        <section id="niveles" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-fuchsia-300"></span>
+                Rangos
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                “Ok… entonces yo no era editor, <span class="opacity-75">yo solo cortaba</span>”
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                Aquí viene la parte incómoda: sí existen rangos claros.
+                Y el salto ocurre cuando dejas de preguntar “¿qué corto?” y empiezas a preguntar “¿qué siente el espectador en este segundo?”.
+              </p>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+              <!-- Nivel 1 -->
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-extrabold">Nivel 1 — El que corta (técnico)</div>
+                  <span class="text-xs opacity-70">Velocidad</span>
+                </div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Corta silencios</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Elimina errores</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Junta clips y exporta</li>
+                </ul>
+                <div class="mt-4 text-sm opacity-80">
+                  <span class="font-semibold">No decide narrativa</span>, ejecuta instrucciones.
+                </div>
+              </div>
+
+              <!-- Nivel 2 -->
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-extrabold">Nivel 2 — Editor narrativo (creativo)</div>
+                  <span class="text-xs opacity-70">Impacto</span>
+                </div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Corta para que duela / pegue</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Cambia el orden si mejora la historia</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Usa música, pausas y respiraciones</li>
+                </ul>
+                <div class="mt-4 text-sm opacity-80">
+                  Aquí ya no solo corta: <span class="font-semibold">interpreta</span>.
+                </div>
+              </div>
+
+              <!-- Nivel 3 -->
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-extrabold">Nivel 3 — Director de edición</div>
+                  <span class="text-xs opacity-70">Retención</span>
+                </div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Define estilo del canal / marca</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Reglas: planos, ritmo, silencios, zooms</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Piensa en mensaje y coherencia estética</li>
+                </ul>
+                <div class="mt-4 text-sm opacity-80">
+                  Muchas veces <span class="font-semibold">piensa más</span> de lo que corta.
+                </div>
+              </div>
+
+              <!-- Nivel 4 -->
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-extrabold">Nivel 4 — Especialista técnico</div>
+                  <span class="text-xs opacity-70">Precisión</span>
+                </div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Color grading</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Audio (limpieza / mezcla)</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Motion / VFX / multi-formato</li>
+                </ul>
+                <div class="mt-4 text-sm opacity-80">
+                  Especialistas: <span class="font-semibold">no hacen “de todo”</span>, hacen “lo suyo” muy bien.
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Mini-remate</div>
+              <div class="mt-2 text-lg sm:text-xl font-extrabold">
+                El nivel sube cuando pasas de ejecutar… a pensar la edición.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tiempo -->
+        <section id="tiempo" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-emerald-300"></span>
+                Problema
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                El verdadero enemigo: <span class="opacity-75">el tiempo</span>
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                Editar bien toma tiempo. Publicar toma tiempo. Analizar resultados toma tiempo.
+                Y mientras tanto… el contenido se vuelve viejo.
+              </p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-4">
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:-translate-y-0.5 transition">
+                <div class="text-sm font-extrabold">1) Editar</div>
+                <div class="mt-2 text-sm opacity-80">Cortes, subtítulos, encuadre, ritmo.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:-translate-y-0.5 transition">
+                <div class="text-sm font-extrabold">2) Publicar</div>
+                <div class="mt-2 text-sm opacity-80">Títulos, descripción, formatos, plataformas.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:-translate-y-0.5 transition">
+                <div class="text-sm font-extrabold">3) Aprender</div>
+                <div class="mt-2 text-sm opacity-80">Likes, comentarios, retención, iteración.</div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-gradient-to-r from-emerald-500/20 via-white/5 to-indigo-500/20 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Insight viral</div>
+              <div class="mt-2 text-xl sm:text-2xl font-extrabold">
+                “No perdemos contenido por falta de ideas. Lo perdemos por falta de tiempo.”
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Flujo -->
+        <section id="flujo" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-amber-300"></span>
+                Flujo
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                Cómo trabaja un editor <span class="opacity-75">en la vida real</span>
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                Este es el “pipeline” clásico, el que nadie te explica cuando solo te dicen “corta y ya”.
+              </p>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-4">
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">1) Recibe el material</div>
+                <div class="mt-2 text-sm opacity-80">Cámaras, audios, brief, indicaciones.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">2) Entiende intención</div>
+                <div class="mt-2 text-sm opacity-80">Qué se quiere decir, a quién, dónde se publicará.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">3) Rough cut</div>
+                <div class="mt-2 text-sm opacity-80">Arma la historia sin obsesionarse con detalles.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">4) Edición fina</div>
+                <div class="mt-2 text-sm opacity-80">Ritmo, cortes precisos, música, texto, transiciones.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">5) Correcciones</div>
+                <div class="mt-2 text-sm opacity-80">Cambios del cliente / director. Ajustes de timing.</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">6) Exportes</div>
+                <div class="mt-2 text-sm opacity-80">Formato final + versiones para redes (16:9, 9:16, 1:1).</div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Lo que separa a los buenos</div>
+              <div class="mt-2 text-lg sm:text-xl font-extrabold">
+                Un buen editor no pregunta “¿qué corto?” — pregunta “¿qué siente el espectador en este segundo?”
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Herramienta -->
+        <section id="herramienta" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+              <div>
+                <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                  <span class="h-1.5 w-1.5 rounded-full bg-sky-300"></span>
+                  Giro
+                </div>
+                <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                  Entonces hice lo más lógico <span class="opacity-75">(para mí)</span>
+                </h2>
+                <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                  Yo no resolví esto aprendiendo más botones. Lo resolví como ingeniero:
+                  si editar es ritmo, intención y formato… entonces lo repetitivo se puede modelar.
+                </p>
+              </div>
+
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-4 w-full md:w-80">
+                <div class="text-xs opacity-70 uppercase tracking-wider">Resultado</div>
+                <div class="mt-2 font-extrabold text-lg">Una herramienta que piensa como editor</div>
+                <div class="mt-2 text-sm opacity-80">y ejecuta como máquina.</div>
+              </div>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+              <div class="group rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center gap-2">
+                  <span class="h-8 w-8 rounded-2xl grid place-items-center bg-white/8 border border-white/10 group-hover:bg-white/12 transition">
+                    <svg class="h-4 w-4 opacity-90" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <div class="font-extrabold">Cortes</div>
+                </div>
+                <div class="mt-3 text-sm opacity-80">Detecta momentos fuertes y corta clips listos.</div>
+              </div>
+
+              <div class="group rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center gap-2">
+                  <span class="h-8 w-8 rounded-2xl grid place-items-center bg-white/8 border border-white/10 group-hover:bg-white/12 transition">
+                    <svg class="h-4 w-4 opacity-90" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 7h16M4 12h10M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <div class="font-extrabold">Subtítulos</div>
+                </div>
+                <div class="mt-3 text-sm opacity-80">Subtítulos claros, legibles y listos para redes.</div>
+              </div>
+
+              <div class="group rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="flex items-center gap-2">
+                  <span class="h-8 w-8 rounded-2xl grid place-items-center bg-white/8 border border-white/10 group-hover:bg-white/12 transition">
+                    <svg class="h-4 w-4 opacity-90" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <div class="font-extrabold">Publicación</div>
+                </div>
+                <div class="mt-3 text-sm opacity-80">Listo para YouTube/Shorts o compartir en WhatsApp.</div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-gradient-to-r from-sky-500/20 via-white/5 to-indigo-500/20 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Remate</div>
+              <div class="mt-2 text-xl sm:text-2xl font-extrabold">
+                “La máquina hace lo repetitivo. El humano decide lo importante.”
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- IA -->
+        <section id="ia" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-indigo-200"></span>
+                IA
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                IA: <span class="opacity-75">no reemplaza</span>, acelera
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                La IA no edita por ti. Te quita el desgaste: analiza, propone y te deja más tiempo para decidir.
+              </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4">
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">Para qué la uso</div>
+                <ul class="mt-3 space-y-2 text-sm sm:text-base opacity-85">
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Analizar el contenido</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Proponer títulos</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Escribir descripciones</li>
+                  <li class="flex gap-2"><span class="opacity-60">•</span> Sugerir hashtags</li>
+                </ul>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-sm font-extrabold">Regla simple</div>
+                <div class="mt-3 text-sm sm:text-base opacity-85 leading-relaxed">
+                  <span class="font-semibold">La IA acelera</span>.  
+                  <span class="font-semibold">El criterio humano decide</span>.  
+                  Si el mensaje se pierde, aunque sea “rápido”, no sirve.
+                </div>
+                <div class="mt-4 inline-flex items-center gap-2 text-xs opacity-70">
+                  <span class="h-1.5 w-1.5 rounded-full bg-white/60"></span>
+                  Esto es lo que mantiene la calidad.
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+              <div class="text-xs uppercase tracking-wider opacity-70">Frase corta</div>
+              <div class="mt-2 text-lg sm:text-xl font-extrabold">
+                “Automatizar no es perder calidad: es protegerla.”
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cierre -->
+        <section id="cierre" class="glass g-border rounded-3xl p-6 sm:p-8 reveal">
+          <div class="flex flex-col gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 rounded-full bg-white/8 border border-white/10 px-3 py-1 text-xs font-semibold opacity-90">
+                <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
+                Cierre
+              </div>
+              <h2 class="mt-4 text-2xl sm:text-4xl font-extrabold tracking-tight">
+                Por eso este es mi primer video
+              </h2>
+              <p class="mt-4 text-base sm:text-lg opacity-80 max-w-3xl leading-relaxed">
+                Soy editor de video… y este es mi primer video como editor.
+                No porque no haya editado antes, sino porque hasta ahora entendí qué significa editar de verdad.
+              </p>
+            </div>
+
+            <div class="grid lg:grid-cols-3 gap-4">
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-xs uppercase tracking-wider opacity-70">Hook</div>
+                <div class="mt-2 font-extrabold text-lg">“Soy editor de video…”</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-xs uppercase tracking-wider opacity-70">Giro</div>
+                <div class="mt-2 font-extrabold text-lg">“…y este es mi primer video”</div>
+              </div>
+              <div class="rounded-3xl bg-white/5 border border-white/10 p-5 hover:bg-white/7 transition">
+                <div class="text-xs uppercase tracking-wider opacity-70">Remate</div>
+                <div class="mt-2 font-extrabold text-lg">“Editar es decidir”</div>
+              </div>
+            </div>
+
+            <div class="rounded-3xl bg-gradient-to-r from-indigo-500/25 via-cyan-400/15 to-fuchsia-500/25 border border-white/10 p-6">
+              <div class="text-xs uppercase tracking-wider opacity-70">Frase final para Shorts</div>
+              <div class="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight leading-tight">
+                “Editar no es cortar. Editar es decidir.”
+              </div>
+              <div class="mt-4 flex flex-wrap gap-2">
+                <button id="copyLine" class="rounded-full px-4 py-2 bg-white/10 hover:bg-white/14 border border-white/10 transition text-sm font-semibold">
+                  Copiar frase
+                </button>
+                <button class="rounded-full px-4 py-2 bg-white/8 hover:bg-white/12 border border-white/10 transition text-sm font-semibold chip"
+                        data-jump="#intro">
+                  Volver al inicio ↑
+                </button>
+              </div>
+              <div id="copyToast" class="mt-3 text-sm opacity-0 transition opacity duration-300">✅ Copiado</div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Presentation overlay (optional) -->
+  <div id="presentOverlay" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="absolute inset-x-0 top-4 mx-auto max-w-4xl px-4">
+      <div class="glass g-border rounded-3xl p-4 flex items-center justify-between gap-3">
+        <div class="text-sm font-semibold">
+          Modo Presentación <span class="opacity-70">(← → para navegar, Esc para salir)</span>
+        </div>
+        <button id="btnExitPresent" class="rounded-2xl px-4 py-2 bg-white/10 hover:bg-white/14 border border-white/10 transition text-sm font-semibold">
+          Salir
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Helpers ----------
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const $  = (sel, root=document) => root.querySelector(sel);
+
+    const sections = ["intro","que-es","niveles","tiempo","flujo","herramienta","ia","cierre"];
+    const navItems = $$(".nav-item");
+
+    function setActive(id) {
+      navItems.forEach(a => a.dataset.active = (a.dataset.target === id) ? "true" : "false");
+    }
+
+    function scrollToId(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({behavior: "smooth", block: "start"});
+      setActive(id);
+    }
+
+    // ---------- Scrollspy ----------
+    const obs = new IntersectionObserver((entries) => {
+      // choose the most visible entry
+      const visible = entries
+        .filter(e => e.isIntersecting)
+        .sort((a,b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+      if (visible?.target?.id) setActive(visible.target.id);
+    }, { threshold: [0.35, 0.5, 0.65] });
+
+    sections.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) obs.observe(el);
+    });
+
+    // ---------- Reveal on view ----------
+    const revealObs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) e.target.classList.add("visible");
+      });
+    }, { threshold: 0.12 });
+
+    $$(".reveal").forEach(el => revealObs.observe(el));
+
+    // ---------- Nav click ----------
+    navItems.forEach(a => {
+      a.addEventListener("click", (ev) => {
+        // allow default hash update, but smooth scroll is fine
+        const id = a.dataset.target;
+        if (id) setTimeout(() => setActive(id), 0);
+      });
+    });
+
+    // ---------- Chips jump ----------
+    $$(".chip").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const to = btn.getAttribute("data-jump");
+        if (to) scrollToId(to.replace("#",""));
+      });
+    });
+
+    // ---------- Parallax on mouse ----------
+    const p1 = $("#p1"), p2 = $("#p2"), p3 = $("#p3");
+    const layers = [
+      { el: p1, k: 10 },
+      { el: p2, k: 16 },
+      { el: p3, k: 22 },
+    ];
+
+    let raf = null;
+    window.addEventListener("mousemove", (e) => {
+      const x = (e.clientX / window.innerWidth) - 0.5;
+      const y = (e.clientY / window.innerHeight) - 0.5;
+
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        layers.forEach(({el,k}) => {
+          if (!el) return;
+          el.style.setProperty("--tx", `${-x * k}px`);
+          el.style.setProperty("--ty", `${-y * k}px`);
+        });
+      });
+    });
+
+    // ---------- Presentation mode ----------
+    const overlay = $("#presentOverlay");
+    const btnPresent = $("#btnPresent");
+    const btnExitPresent = $("#btnExitPresent");
+
+    let isPresent = false;
+
+    function enterPresent() {
+      isPresent = true;
+      overlay.classList.remove("hidden");
+      document.body.classList.add("overflow-hidden");
+      // Keep scroll enabled? We'll keep it (feel). But overlay indicates mode.
+      document.body.classList.remove("overflow-hidden"); // allow scroll
+    }
+    function exitPresent() {
+      isPresent = false;
+      overlay.classList.add("hidden");
+    }
+
+    btnPresent?.addEventListener("click", () => {
+      isPresent ? exitPresent() : enterPresent();
+    });
+    btnExitPresent?.addEventListener("click", exitPresent);
+
+    // Keyboard navigation
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && isPresent) exitPresent();
+
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        // find current active
+        const active = navItems.find(a => a.dataset.active === "true");
+        const cur = active?.dataset.target || "intro";
+        const idx = sections.indexOf(cur);
+        if (idx === -1) return;
+
+        const nextIdx = e.key === "ArrowRight"
+          ? Math.min(sections.length - 1, idx + 1)
+          : Math.max(0, idx - 1);
+
+        const nextId = sections[nextIdx];
+        scrollToId(nextId);
+      }
+    });
+
+    // ---------- Copy CTA ----------
+    const copyBtn = $("#copyLine");
+    const toast = $("#copyToast");
+    copyBtn?.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText("Editar no es cortar. Editar es decidir.");
+        toast.classList.remove("opacity-0");
+        toast.classList.add("opacity-100");
+        setTimeout(() => {
+          toast.classList.remove("opacity-100");
+          toast.classList.add("opacity-0");
+        }, 1200);
+      } catch (err) {
+        // fallback
+        alert("No pude copiar automáticamente. Copia manualmente: “Editar no es cortar. Editar es decidir.”");
+      }
+    });
+  </script>
+</body>
+</html>

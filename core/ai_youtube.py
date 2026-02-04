@@ -10,6 +10,7 @@ from core.video_transcription import (
 )
 from core.youtube_upload import YouTubeUploadError, upload_video
 from core.api_endpoints import get_primary_endpoint_url
+from core.utils import obtener_duracion_segundos
 
 MAX_METADATA_ATTEMPTS = 3
 

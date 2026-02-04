@@ -156,7 +156,8 @@ def create_tab(parent, context):
     whatsapp_state.setdefault("contacts", [])
     whatsapp_state.setdefault("global_message", "")
     whatsapp_state.setdefault("global_media", "")
-    whatsapp_state.setdefault("use_drive", False)
+    # WhatsApp media: always upload to Drive to avoid flaky public upload services.
+    whatsapp_state.setdefault("use_drive", True)
     whatsapp_state.setdefault("drive_folder", "")
 
     parent.grid_columnconfigure(0, weight=1)
@@ -296,7 +297,7 @@ def create_tab(parent, context):
     btn_clear_media = ctk.CTkButton(media_card, text="Borrar media", fg_color="#aa4444")
     btn_clear_media.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 10))
 
-    drive_var = tk.BooleanVar(value=whatsapp_state.get("use_drive", False))
+    drive_var = tk.BooleanVar(value=True)
     drive_folder_var = context.get("drive_folder_var")
     if drive_folder_var is None:
         drive_folder_var = tk.StringVar(value=whatsapp_state.get("drive_folder", ""))
@@ -304,6 +305,7 @@ def create_tab(parent, context):
         whatsapp_state["drive_folder"] = drive_folder_var.get().strip()
     drive_checkbox = ctk.CTkCheckBox(media_card, text="Subir a Google Drive", variable=drive_var)
     drive_checkbox.grid(row=4, column=0, sticky="w", padx=12, pady=(0, 6))
+    drive_checkbox.configure(state="disabled")
 
     lbl_folder = ctk.CTkLabel(media_card, text="ID carpeta Drive (opcional)", font=ctk.CTkFont(size=12))
     lbl_folder.grid(row=5, column=0, sticky="w", padx=12, pady=(4, 0))
@@ -311,7 +313,7 @@ def create_tab(parent, context):
     entry_folder.grid(row=6, column=0, sticky="ew", padx=12, pady=(0, 6))
 
     def _on_drive_change(*_):
-        whatsapp_state["use_drive"] = drive_var.get()
+        whatsapp_state["use_drive"] = True
 
     def _on_folder_change(*_):
         whatsapp_state["drive_folder"] = drive_folder_var.get().strip()
@@ -421,7 +423,7 @@ def create_tab(parent, context):
             if not whatsapp_state["contacts"]:
                 raise ValueError("Agrega al menos un número.")
             global_message = whatsapp_state.get("global_message", "").strip()
-            use_drive = drive_var.get()
+            use_drive = True
             drive_folder = drive_folder_var.get().strip() or None
             try:
                 interval = float(entry_interval_send.get().strip() or DEFAULT_INTERVAL_SECONDS)
@@ -442,11 +444,10 @@ def create_tab(parent, context):
                 file_id = None
                 if lower.startswith("http://") or lower.startswith("https://"):
                     url = ensure_media_url(trimmed, logs=log_fn)
-                elif use_drive:
+                else:
+                    # Always upload local media to Drive.
                     file_id, url = upload_media_to_drive(trimmed, logs=log_fn, folder_id=drive_folder)
                     drive_file_ids.append(file_id)
-                else:
-                    url = ensure_media_url(trimmed, logs=log_fn)
                 if not url:
                     raise RuntimeError("No se pudo obtener una URL para la media.")
                 media_cache[trimmed] = (url, file_id)
