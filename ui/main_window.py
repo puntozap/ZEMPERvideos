@@ -24,6 +24,7 @@ from ui.tabs import (
     youtube_mp3_tab,
     youtube_mp4_tab,
     youtube_upload_tab,
+    youtube_analytics_tab,
 )
 
 
@@ -135,6 +136,7 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Descargas")
     tabs.add("Drive")
     tabs.add("YouTube")
+    tabs.add("Analítica")
     tabs.add("WhatsApp")
     tabs.add("Actividad")
 
@@ -147,6 +149,7 @@ def iniciar_app(procesar_video_fn):
     tab_youtube_main = tabs.tab("YouTube")
     tab_whatsapp_main = tabs.tab("WhatsApp")
     tab_act = tabs.tab("Actividad")
+    tab_analytics = tabs.tab("Analítica")
 
     corte_tabs = ctk.CTkTabview(tab_corte_main, corner_radius=10)
     corte_tabs.pack(fill="both", expand=True, padx=6, pady=6)
@@ -342,6 +345,12 @@ def iniciar_app(procesar_video_fn):
         "stop_control": stop_control,
         "whatsapp_state": whatsapp_state,
         "drive_folder_var": drive_folder_var,
+    })
+
+    youtube_analytics_tab.create_tab(tab_analytics, {
+        "log": log,
+        "log_global": log,
+        "stop_control": stop_control,
     })
 
     actividad_tab.create_tab(tab_act, {

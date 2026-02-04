@@ -55,6 +55,36 @@ EXTERNAL_API_ENDPOINTS = [
         "url": "https://www.googleapis.com/youtube/v3",
     },
     {
+        "name": "YouTube Data channels",
+        "description": "YouTube Data API v3: channels (mine/contentDetails).",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+    },
+    {
+        "name": "YouTube Data playlistItems",
+        "description": "YouTube Data API v3: playlistItems (uploads list).",
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+    },
+    {
+        "name": "YouTube Data videos",
+        "description": "YouTube Data API v3: videos (snippet/statistics/contentDetails/status).",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+    },
+    {
+        "name": "YouTube Data commentThreads",
+        "description": "YouTube Data API v3: commentThreads (listar comentarios).",
+        "url": "https://www.googleapis.com/youtube/v3/commentThreads",
+    },
+    {
+        "name": "YouTube Analytics",
+        "description": "Endpoint de YouTube Analytics Reports.",
+        "url": "https://youtubeanalytics.googleapis.com/v2",
+    },
+    {
+        "name": "YouTube Analytics reports",
+        "description": "YouTube Analytics Reports: reports (metrics/dimensions).",
+        "url": "https://youtubeanalytics.googleapis.com/v2/reports",
+    },
+    {
         "name": "TikTok OAuth",
         "description": "Autenticación para la API de TikTok.",
         "url": [

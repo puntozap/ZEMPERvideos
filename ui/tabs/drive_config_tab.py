@@ -15,6 +15,7 @@ from core.drive_config import (
 )
 from ui.dialogs import mostrar_error, mostrar_info, seleccionar_archivo
 from ui.shared import helpers
+from ui.shared.tab_shell import create_tab_shell
 
 
 def create_tab(parent, context):
@@ -29,9 +30,9 @@ def create_tab(parent, context):
     parent.grid_columnconfigure(0, weight=1)
     parent.grid_rowconfigure(0, weight=1)
 
-    container = ctk.CTkFrame(parent, fg_color="transparent")
-    container.grid(row=0, column=0, sticky="nsew", padx=16, pady=16)
+    container, scroll_body = create_tab_shell(parent, padx=16, pady=16)
     container.grid_columnconfigure(0, weight=1)
+    container.grid_columnconfigure(1, weight=0)
 
     log_card, _, log_fn = helpers.create_log_panel(
         container,
@@ -41,7 +42,7 @@ def create_tab(parent, context):
     )
     log_card.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
-    body = ctk.CTkFrame(container, corner_radius=12)
+    body = ctk.CTkFrame(scroll_body, corner_radius=12)
     body.grid(row=0, column=0, sticky="nsew")
     body.grid_columnconfigure(0, weight=1)
 

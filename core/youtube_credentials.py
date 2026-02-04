@@ -19,7 +19,13 @@ from typing import Iterable, Optional
 BASE_DIR = Path(__file__).resolve().parent.parent
 CREDENTIALS_DIR = BASE_DIR / "credentials"
 _ACTIVE_MARKER = CREDENTIALS_DIR / ".active_credentials"
-DEFAULT_SCOPES = ("https://www.googleapis.com/auth/youtube.upload",)
+YOUTUBE_ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
+DEFAULT_SCOPES = (
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    YOUTUBE_ANALYTICS_SCOPE,
+)
 _ALLOWED_EXTENSIONS = {".json"}
 
 

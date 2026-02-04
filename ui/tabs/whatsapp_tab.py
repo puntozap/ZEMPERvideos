@@ -460,10 +460,14 @@ def create_tab(parent, context):
                 message = contact.get("message", "").strip() if contact.get("custom_message") else global_message
                 if not message:
                     raise ValueError(f"Falta mensaje para {number}.")
-                media_source = contact.get("media_path") if contact.get("custom_media") else whatsapp_state.get("global_media")
-                media_url, _ = _resolve_media(media_source)
-                if not media_url:
-                    raise RuntimeError(f"No se pudo obtener URL para {number}.")
+                media_source = (
+                    contact.get("media_path") if contact.get("custom_media") else whatsapp_state.get("global_media")
+                )
+                media_url = None
+                if media_source:
+                    media_url, _ = _resolve_media(media_source)
+                    if not media_url:
+                        raise RuntimeError(f"No se pudo obtener URL para {number}.")
                 entries.append({"number": number, "message": message, "media_url": media_url})
 
             enviar_mensajes_whatsapp(

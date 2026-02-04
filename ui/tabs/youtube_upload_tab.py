@@ -4,6 +4,7 @@ import threading
 import time
 import tkinter as tk
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 import webbrowser
 
 import customtkinter as ctk
@@ -21,7 +22,12 @@ from core.utils import obtener_duracion_segundos
 from core.ai_youtube import generar_textos_youtube
 from ui.dialogs import mostrar_error, mostrar_info, seleccionar_archivo
 from ui.shared import helpers
-from core.oauth_redirect_server import CALLBACK_FILE, REDIRECT_PORT, start_redirect_server
+from core.oauth_redirect_server import (
+    CALLBACK_FILE,
+    REDIRECT_PORT,
+    start_redirect_server,
+    stop_redirect_server,
+)
 from core.youtube_api import listar_videos_subidos
 
 
@@ -73,11 +79,55 @@ _oauth_server = None
 _server_lock = threading.Lock()
 
 
-def _ensure_oauth_server():
+def _extract_code(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    # User may paste the full redirect URL instead of just the code.
+    if "http://" in text or "https://" in text or "localhost" in text:
+        try:
+            parsed = urlparse(text)
+            qs = parse_qs(parsed.query)
+            code = (qs.get("code") or [""])[0].strip()
+            return code or text
+        except Exception:
+            return text
+    # User may paste query string like "code=...&scope=..."
+    if "code=" in text:
+        try:
+            qs = parse_qs(text.lstrip("?"))
+            return (qs.get("code") or [""])[0].strip() or text
+        except Exception:
+            return text
+    return text
+
+
+def _port_from_redirect(redirect: str) -> int:
+    try:
+        parsed = urlparse(redirect)
+        if parsed.port:
+            return int(parsed.port)
+        # If no explicit port, fall back to common defaults.
+        if parsed.scheme == "https":
+            return 443
+        return 80
+    except Exception:
+        return REDIRECT_PORT
+
+
+def _ensure_oauth_server(port: int = REDIRECT_PORT):
     global _oauth_server
     with _server_lock:
         if _oauth_server is None:
-            _oauth_server = start_redirect_server()
+            _oauth_server = start_redirect_server(port=port)
+        else:
+            current_port = getattr(_oauth_server, "server_address", (None, None))[1]
+            if current_port != port:
+                try:
+                    stop_redirect_server(_oauth_server)
+                except Exception:
+                    pass
+                _oauth_server = start_redirect_server(port=port)
     return _oauth_server
 
 
@@ -253,15 +303,15 @@ def create_tab(parent, context):
         threading.Thread(target=monitor, daemon=True).start()
 
     def _start_oauth_flow(target_path: Path):
-        _ensure_oauth_server()
+        redirect = redirect_var.get().strip() or DEFAULT_REDIRECT
+        _ensure_oauth_server(_port_from_redirect(redirect))
         client_id = client_id_var.get().strip()
         client_secret = client_secret_var.get().strip()
-        redirect = redirect_var.get().strip() or DEFAULT_REDIRECT
         if not (client_id and client_secret):
             mostrar_error("Faltan Client ID o Client Secret en el archivo.")
             return
         helpers.log_seccion(log, None, "OAuth automática")
-        log(f"Servidor OAuth activo en localhost:{REDIRECT_PORT}. Abriendo navegador...")
+        log(f"Servidor OAuth activo en {redirect}. Abriendo navegador...")
         try:
             oauth_url = build_oauth_url(client_id, redirect, list(DEFAULT_SCOPES))
         except Exception as exc:
@@ -349,7 +399,10 @@ def create_tab(parent, context):
         if not cid or not secret:
             mostrar_error("Falta Client ID o Client Secret.")
             return
-        url = build_oauth_url(cid, redirect, ["https://www.googleapis.com/auth/youtube.upload"])
+        # Start local redirect server for the chosen port so the browser redirect is captured.
+        _ensure_oauth_server(_port_from_redirect(redirect))
+        CALLBACK_FILE.unlink(missing_ok=True)
+        url = build_oauth_url(cid, redirect, list(DEFAULT_SCOPES))
         oauth_url_var.set(url)
         log("URL de autorización generada.")
 
@@ -358,6 +411,8 @@ def create_tab(parent, context):
         if not url or url.startswith("Aquí"):
             mostrar_error("Genera primero la URL.")
             return
+        redirect = redirect_var.get().strip() or DEFAULT_REDIRECT
+        _ensure_oauth_server(_port_from_redirect(redirect))
         webbrowser.open(url)
 
     btn_row = ctk.CTkFrame(oauth_frame, fg_color="transparent")
@@ -374,7 +429,7 @@ def create_tab(parent, context):
     create_oauth_row("Código", ctk.CTkEntry(oauth_frame, textvariable=oauth_code_var), 6)
 
     def intercambiar_codigo():
-        code = oauth_code_var.get().strip()
+        code = _extract_code(oauth_code_var.get())
         cid = client_id_var.get().strip()
         secret = client_secret_var.get().strip()
         redirect = redirect_var.get().strip() or DEFAULT_REDIRECT
@@ -386,14 +441,70 @@ def create_tab(parent, context):
         except Exception as exc:
             mostrar_error(f"Error intercambiando código: {exc}")
             return
+        # Try to persist tokens automatically into an existing active credentials file.
+        target_path = find_active_credentials_file()
+        if not target_path:
+            # If there is no file yet, create one in credentials/ so the app can work immediately.
+            credentials_dir = Path("credentials")
+            credentials_dir.mkdir(parents=True, exist_ok=True)
+            target_path = credentials_dir / "youtube_credentials_manual.json"
+            credentials_data = {
+                "installed": {
+                    "client_id": cid,
+                    "client_secret": secret,
+                    "token_uri": tokens.get("token_uri"),
+                    "refresh_token": tokens.get("refresh_token"),
+                    "scopes": list(DEFAULT_SCOPES),
+                },
+                "refresh_token": tokens.get("refresh_token"),
+                "token_uri": tokens.get("token_uri"),
+                "scopes": list(DEFAULT_SCOPES),
+            }
+        else:
+            try:
+                credentials_data = json.loads(target_path.read_text(encoding="utf-8"))
+            except Exception:
+                credentials_data = {}
+            credentials_data.setdefault("scopes", list(DEFAULT_SCOPES))
+            credentials_data.update(
+                {
+                    "refresh_token": tokens.get("refresh_token"),
+                    "token_uri": tokens.get("token_uri") or credentials_data.get("token_uri"),
+                    "access_token": tokens.get("access_token") or credentials_data.get("access_token"),
+                }
+            )
+            installed = credentials_data.get("installed")
+            if isinstance(installed, dict):
+                installed.setdefault("scopes", list(DEFAULT_SCOPES))
+                refresh_token = tokens.get("refresh_token")
+                if refresh_token:
+                    installed["refresh_token"] = refresh_token
+                if tokens.get("token_uri"):
+                    installed.setdefault("token_uri", tokens.get("token_uri"))
+
+        try:
+            target_path.write_text(json.dumps(credentials_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            mostrar_error(f"No se guardaron tokens: {exc}")
+            log(f"Error guardando tokens en {target_path.name}: {exc}")
+            return
+
+        # Mark it active via the normal register flow when possible.
+        try:
+            register_credentials(target_path, make_active=True, prefer_name=target_path.name)
+        except Exception:
+            # register_credentials expects source path; our target may already be in credentials/.
+            pass
+
         message = (
-            "Tokens recibidos:\n"
+            "Tokens recibidos y guardados:\n"
+            f"Archivo: {target_path}\n"
             f"refresh_token: {tokens.get('refresh_token')}\n"
-            f"access_token: {tokens.get('access_token')}\n"
             f"token_uri: {tokens.get('token_uri')}"
         )
         mostrar_info(message)
-        log("Tokens OAuth obtenidos. Agrega refresh_token al JSON y regístralo.")
+        log(f"Tokens OAuth guardados en: {target_path.name}")
+        refresh_status()
 
     ctk.CTkButton(oauth_frame, text="Intercambiar código", command=intercambiar_codigo, height=32).grid(
         row=7, column=0, columnspan=2, sticky="ew"

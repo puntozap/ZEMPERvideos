@@ -59,4 +59,4 @@ La UI se inicia maximizada, fija los submenús y escucha `localhost:4850` para c
 - `docs/youtube_credentials.md` y `docs/youtube_upload.md`: ayuda para registrar JSON y subir videos con OAuth.  
 - `api-tik-tok.md` y otros README dentro de `docs/` explican flujos específicos de TikTok y demás integraciones.
 
-Si necesitas que este README también incluya capturas, un diagrama de arquitectura o los pasos exactos de OAuth/WhatsApp, dime y los agrego.
+

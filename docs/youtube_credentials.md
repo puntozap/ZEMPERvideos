@@ -29,7 +29,12 @@ from core.youtube_oauth import build_oauth_url, exchange_code_for_tokens
 url = build_oauth_url(
     client_id="TU_CLIENT_ID.apps.googleusercontent.com",
     redirect_uri="urn:ietf:wg:oauth:2.0:oob",
-    scopes=["https://www.googleapis.com/auth/youtube.upload"],
+    scopes=[
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/youtube.force-ssl",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+    ],
 )
 print("Abre esta URL en tu navegador, autoriza y pega el código:")
 print(url)
@@ -44,6 +49,8 @@ print(tokens)
 ```
 
 Esta respuesta incluye `refresh_token`, que debes agregar al JSON antes de registrarlo.
+
+> **Nota:** el alcance `https://www.googleapis.com/auth/yt-analytics.readonly` se requiere para consultar las métricas (videos vs shorts). Si ya registraste una credencial anterior, vuelve a generar el `refresh_token` incluyendo ese scope.
 
 La pestaña “YouTube” del escritorio ya incluye esta ayuda: pega tus claves, genera la URL, abre el navegador y pega el código que te da Google para intercambiarlo. El refresh token aparece en el cuadro emergente y puedes copiarlo directamente al JSON desde allí antes de registrarlo.
 
