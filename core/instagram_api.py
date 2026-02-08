@@ -199,14 +199,20 @@ class InstagramUploader:
             "offset": "0",
             "file_size": str(file_size),
             "Content-Type": "application/octet-stream",
+            "Content-Length": str(file_size),
         }
         try:
             with open(file_path, "rb") as f:
-                r = requests.post(upload_uri, headers=headers, data=f)
+                payload = f.read()
+            r = requests.post(upload_uri, headers=headers, data=payload)
             r.raise_for_status()
             return True
         except Exception as e:
             self._log_error(e, "subiendo archivo IG (resumable)", log_fn)
+            if hasattr(e, "response") and e.response is not None and log_fn:
+                preview = (e.response.text or "").strip()[:500]
+                if preview:
+                    log_fn(f"   Respuesta: {preview}")
             return False
 
     def _log_error(self, e, context, log_fn):

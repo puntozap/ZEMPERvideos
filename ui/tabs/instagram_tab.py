@@ -2,6 +2,7 @@ import os
 import json
 import threading
 import time
+import urllib.parse
 import customtkinter as ctk
 from tkinter import filedialog
 
@@ -10,6 +11,7 @@ from ui.shared import helpers
 from core.instagram_api import InstagramUploader
 from core.ai_instagram import generar_descripcion_instagram
 from core.instagram_auth import exchange_long_lived_token
+from core.instagram_oauth import oauth_login_flow
 
 CONFIG_PATH = "credentials/instagram_config.json"
 
@@ -81,6 +83,16 @@ def _setup_config_tab(parent, context):
     entry_token.pack(anchor="w", padx=20, pady=(0, 10))
     entry_token.insert(0, config.get("access_token", ""))
 
+    ctk.CTkLabel(parent, text="Redirect URI:").pack(anchor="w", padx=20)
+    entry_redirect = ctk.CTkEntry(parent, width=400, placeholder_text="http://127.0.0.1:8766/callback")
+    entry_redirect.pack(anchor="w", padx=20, pady=(0, 10))
+    entry_redirect.insert(0, config.get("redirect_uri", "http://127.0.0.1:8766/callback"))
+
+    ctk.CTkLabel(parent, text="Scopes:").pack(anchor="w", padx=20)
+    entry_scopes = ctk.CTkEntry(parent, width=400)
+    entry_scopes.pack(anchor="w", padx=20, pady=(0, 10))
+    entry_scopes.insert(0, config.get("scopes", "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement"))
+
     ctk.CTkLabel(parent, text="App ID (opcional):").pack(anchor="w", padx=20)
     entry_app_id = ctk.CTkEntry(parent, width=400, placeholder_text="App ID")
     entry_app_id.pack(anchor="w", padx=20, pady=(0, 10))
@@ -108,6 +120,8 @@ def _setup_config_tab(parent, context):
             "app_id": entry_app_id.get().strip(),
             "app_secret": entry_app_secret.get().strip(),
             "token_expires_at": config.get("token_expires_at"),
+            "redirect_uri": entry_redirect.get().strip(),
+            "scopes": entry_scopes.get().strip(),
         }
         _save_config(data)
         log("✅ Configuración de Instagram guardada.")
@@ -133,7 +147,45 @@ def _setup_config_tab(parent, context):
         except Exception as e:
             log(f"❌ Error renovando token: {e}")
 
+    def conectar():
+        def _run():
+            try:
+                redirect_uri = entry_redirect.get().strip()
+                parsed = urllib.parse.urlparse(redirect_uri)
+                if parsed.hostname in ("127.0.0.1", "localhost"):
+                    listen_host = parsed.hostname
+                    listen_port = parsed.port or 80
+                else:
+                    # Cuando usamos ngrok (https), el servidor local sigue escuchando en 127.0.0.1:8766
+                    listen_host = "127.0.0.1"
+                    listen_port = 8766
+                data = oauth_login_flow(
+                    app_id=entry_app_id.get().strip(),
+                    app_secret=entry_app_secret.get().strip(),
+                    redirect_uri=redirect_uri,
+                    scopes=entry_scopes.get().strip(),
+                    log_fn=log,
+                    timeout_sec=600,
+                    listen_host=listen_host,
+                    listen_port=listen_port,
+                )
+                entry_token.delete(0, "end")
+                entry_token.insert(0, data.get("access_token", ""))
+                config["token_expires_at"] = data.get("expires_at")
+                save()
+                if data.get("expires_at"):
+                    lbl_exp.configure(
+                        text="Token expira: "
+                        + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(data["expires_at"])))
+                    )
+                log("✅ OAuth completado. Token guardado.")
+            except Exception as e:
+                log(f"❌ Error OAuth: {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
+
     ctk.CTkButton(parent, text="Guardar Credenciales", command=save).pack(pady=(10, 6))
+    ctk.CTkButton(parent, text="Conectar con Facebook (OAuth)", command=conectar).pack(pady=(0, 6))
     ctk.CTkButton(parent, text="Renovar token (60 días)", command=renovar).pack(pady=(0, 20))
 
 def _setup_upload_tab(parent, context):
