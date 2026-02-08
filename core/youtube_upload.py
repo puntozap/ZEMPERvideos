@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,30 @@ _token_cache: dict[str, object] = {}
 
 class YouTubeUploadError(Exception):
     pass
+
+
+YOUTUBE_TITLE_MAX_LEN = 100
+_ZERO_WIDTH_CHARS = ("\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad")
+
+
+def _sanitize_youtube_text(value: str) -> str:
+    value = str(value or "")
+    for ch in _ZERO_WIDTH_CHARS:
+        value = value.replace(ch, "")
+    value = re.sub(r"[\x00-\x1f\x7f]+", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
+def _sanitize_youtube_title(title: str, fallback: str) -> str:
+    clean = _sanitize_youtube_text(title)
+    if not clean:
+        clean = _sanitize_youtube_text(fallback)
+    if not clean:
+        clean = "Video"
+    if len(clean) > YOUTUBE_TITLE_MAX_LEN:
+        clean = clean[:YOUTUBE_TITLE_MAX_LEN].rstrip()
+    return clean
 
 
 def _guess_mime_type(path: Path) -> str:
@@ -255,9 +280,14 @@ def upload_video(
     if not path.exists():
         raise YouTubeUploadError("El archivo de video no existe.")
 
+    safe_title = _sanitize_youtube_title(title, path.stem)
+    safe_description = _sanitize_youtube_text(description)
+    if log_fn and safe_title != (title or ""):
+        log_fn(f"Título ajustado para YouTube ({len(safe_title)} chars): {safe_title}")
+
     creds = load_active_credentials()
     access_token = _get_access_token(creds)
-    snippet = _prepare_snippet(title, description, tags, is_short)
+    snippet = _prepare_snippet(safe_title, safe_description, tags, is_short)
     file_size = path.stat().st_size
     content_type = _guess_mime_type(path)
     if log_fn:

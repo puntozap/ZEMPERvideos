@@ -57,6 +57,24 @@ def create_tab(parent, context):
     )
     btn_clear_yt_mp4.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
+    yt_cookies_row = ctk.CTkFrame(yt_mp4_card, fg_color="transparent")
+    yt_cookies_row.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 12))
+    yt_cookies_row.grid_columnconfigure(1, weight=1)
+
+    lbl_cookies = ctk.CTkLabel(
+        yt_cookies_row,
+        text="Cookies navegador (opcional):",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2",
+    )
+    lbl_cookies.grid(row=0, column=0, sticky="w", padx=(0, 10))
+
+    yt_cookies_entry = ctk.CTkEntry(
+        yt_cookies_row,
+        placeholder_text="edge / chrome / firefox (ej: chrome:Default)",
+    )
+    yt_cookies_entry.grid(row=0, column=1, sticky="ew")
+
     def descargar_mp4_youtube():
         url = yt_mp4_entry.get().strip()
         if not url:
@@ -70,7 +88,8 @@ def create_tab(parent, context):
         log_seccion("YouTube MP4")
         log("Descargando video de YouTube...")
         try:
-            out_path = descargar_video_youtube_mp4(url, log_fn=log)
+            cookies_from_browser = (yt_cookies_entry.get() or "").strip() or None
+            out_path = descargar_video_youtube_mp4(url, cookies_from_browser=cookies_from_browser, log_fn=log)
             log(f"OK Video MP4 guardado: {out_path}")
             log("Finalizado proceso de YouTube MP4.")
             log("Fin de la automatizacion.")
@@ -89,7 +108,7 @@ def create_tab(parent, context):
         command=iniciar_descarga_youtube_mp4,
         height=46,
     )
-    btn_yt_mp4.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
+    btn_yt_mp4.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 8))
 
     btn_yt_mp4_open = ctk.CTkButton(
         yt_mp4_card,
@@ -97,7 +116,7 @@ def create_tab(parent, context):
         command=abrir_descargas,
         height=40,
     )
-    btn_yt_mp4_open.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 16))
+    btn_yt_mp4_open.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 16))
 
     log_card, _log_widget, log_local = helpers.create_log_panel(
         container,

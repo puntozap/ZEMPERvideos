@@ -25,6 +25,7 @@ from ui.tabs import (
     youtube_mp4_tab,
     youtube_upload_tab,
     youtube_analytics_tab,
+    instagram_tab,
 )
 
 
@@ -137,6 +138,7 @@ def iniciar_app(procesar_video_fn):
     tabs.add("Drive")
     tabs.add("YouTube")
     tabs.add("Analítica")
+    tabs.add("Instagram")
     tabs.add("WhatsApp")
     tabs.add("Actividad")
 
@@ -147,6 +149,7 @@ def iniciar_app(procesar_video_fn):
     tab_desc_main = tabs.tab("Descargas")
     tab_drive_main = tabs.tab("Drive")
     tab_youtube_main = tabs.tab("YouTube")
+    tab_instagram_main = tabs.tab("Instagram")
     tab_whatsapp_main = tabs.tab("WhatsApp")
     tab_act = tabs.tab("Actividad")
     tab_analytics = tabs.tab("Analítica")
@@ -353,6 +356,11 @@ def iniciar_app(procesar_video_fn):
         "stop_control": stop_control,
     })
 
+    instagram_tab.create_instagram_tab(tab_instagram_main, {
+        "log": log,
+        "stop_control": stop_control,
+    })
+
     actividad_tab.create_tab(tab_act, {
         "log_state": log_state,
         "log": log,
@@ -368,4 +376,3 @@ def iniciar_app(procesar_video_fn):
     ventana.after_idle(lambda: ventana.state("zoomed"))
 
     return ventana, None, log, None
-

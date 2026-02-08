@@ -40,23 +40,51 @@ def create_tab(parent, context):
     scroll.grid(row=0, column=0, sticky="nsew")
     scroll.grid_columnconfigure(0, weight=1)
 
-    card = ctk.CTkFrame(scroll, corner_radius=12)
-    card.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-    card.grid_columnconfigure(0, weight=1)
+    tabview = ctk.CTkTabview(scroll)
+    tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    tabview.grid_columnconfigure(0, weight=1)
 
-    lbl_title = ctk.CTkLabel(card, text="Subir a TikTok", font=ctk.CTkFont(size=18, weight="bold"))
+    tab_connect = tabview.add("Conexión")
+    tab_upload = tabview.add("Subida")
+
+    card_connect = ctk.CTkFrame(tab_connect, corner_radius=12)
+    card_connect.pack(fill="both", expand=True, padx=6, pady=6)
+    card_connect.grid_columnconfigure(0, weight=1)
+
+    card_upload = ctk.CTkFrame(tab_upload, corner_radius=12)
+    card_upload.pack(fill="both", expand=True, padx=6, pady=6)
+    card_upload.grid_columnconfigure(0, weight=1)
+
+    lbl_title = ctk.CTkLabel(card_connect, text="Conectar TikTok", font=ctk.CTkFont(size=18, weight="bold"))
     lbl_title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
 
     lbl_hint = ctk.CTkLabel(
-        card,
+        card_connect,
         text="Conecta tu cuenta y sube videos a borrador o publica directo.",
         font=ctk.CTkFont(size=12),
         text_color="#9aa4b2",
     )
-    lbl_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
+    lbl_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 8))
 
-    auth_card = ctk.CTkFrame(card, corner_radius=10)
-    auth_card.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    setup_card = ctk.CTkFrame(card_connect, corner_radius=10)
+    setup_card.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 12))
+    setup_card.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(setup_card, text="Qué debes conectar (TikTok)", font=ctk.CTkFont(size=13, weight="bold")).grid(
+        row=0, column=0, sticky="w", padx=12, pady=(10, 4)
+    )
+    setup_text = (
+        "1) App en TikTok Developers con Content Posting API habilitada.\n"
+        "2) Redirect URI autorizado: http://127.0.0.1:8765/callback\n"
+        "3) Client Key y Client Secret de la app.\n"
+        "4) Scopes recomendados: video.upload, video.publish\n"
+    )
+    ctk.CTkLabel(setup_card, text=setup_text, justify="left", font=ctk.CTkFont(size=12), text_color="#9aa4b2").grid(
+        row=1, column=0, sticky="w", padx=12, pady=(0, 10)
+    )
+
+    auth_card = ctk.CTkFrame(card_connect, corner_radius=10)
+    auth_card.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 16))
     auth_card.grid_columnconfigure(1, weight=1)
 
     lbl_key = ctk.CTkLabel(auth_card, text="Client Key", font=ctk.CTkFont(size=12))
@@ -186,8 +214,19 @@ def create_tab(parent, context):
     btn_refresh = ctk.CTkButton(auth_card, text="Refrescar token", command=refrescar, height=32)
     btn_refresh.grid(row=6, column=1, sticky="e", padx=12, pady=(0, 12))
 
-    upload_card = ctk.CTkFrame(card, corner_radius=10)
-    upload_card.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 16))
+    upload_title = ctk.CTkLabel(card_upload, text="Subir a TikTok", font=ctk.CTkFont(size=18, weight="bold"))
+    upload_title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
+
+    upload_hint = ctk.CTkLabel(
+        card_upload,
+        text="Selecciona un video y súbelo como borrador o publicación directa.",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2",
+    )
+    upload_hint.grid(row=1, column=0, sticky="w", padx=16, pady=(0, 12))
+
+    upload_card = ctk.CTkFrame(card_upload, corner_radius=10)
+    upload_card.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 16))
     upload_card.grid_columnconfigure(1, weight=1)
 
     lbl_video = ctk.CTkLabel(upload_card, text="Video", font=ctk.CTkFont(size=12))

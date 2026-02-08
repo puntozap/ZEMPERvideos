@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Zemper Media House</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#05070c',
+            neonBlue: '#3CF2FF',
+            neonBlue2: '#4DA6FF',
+            neonViolet: '#7B5CFF',
+            neonPink: '#E879F9',
+            muted: '#9aa3b2',
+          },
+          boxShadow: {
+            glowBlue: '0 0 35px rgba(60,242,255,.35)',
+            glowViolet: '0 0 35px rgba(123,92,255,.35)',
+          },
+          animation: {
+            float: 'float 6s ease-in-out infinite',
+            pulseSlow: 'pulse 6s infinite',
+            gradient: 'gradient 8s ease infinite',
+          },
+          keyframes: {
+            float: {
+              '0%,100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-12px)' },
+            },
+            gradient: {
+              '0%': { backgroundPosition: '0% 50%' },
+              '50%': { backgroundPosition: '100% 50%' },
+              '100%': { backgroundPosition: '0% 50%' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    .parallax {
+      background-attachment: fixed;
+    }
+  </style>
+</head>
+
+<body class="bg-bg text-white overflow-x-hidden">
+
+<!-- HERO -->
+<!-- HERO CON VIDEO -->
+<section class="relative min-h-screen flex items-center justify-center overflow-hidden">
+
+  <!-- YouTube background -->
+  <iframe
+    class="absolute top-1/2 left-1/2 w-[177.77vh] h-[100vh]
+           min-w-[100vw] min-h-[56.25vw]
+           -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+    title="YouTube video background"
+    src="https://www.youtube.com/embed/0IXi8yFDQHw?autoplay=1&amp;mute=1&amp;controls=0&amp;modestbranding=1&amp;loop=1&amp;playlist=0IXi8yFDQHw&amp;rel=0&amp;playsinline=1"
+    frameborder="0"
+    allow="autoplay; encrypted-media"
+    allowfullscreen>
+  </iframe>
+
+  <!-- Overlay oscuro -->
+  <div class="absolute inset-0 bg-gradient-to-b
+              from-black/70 via-black/60 to-bg"></div>
+
+  <!-- Glow animado -->
+  <div class="absolute w-80 h-80 bg-neonBlue opacity-25 blur-3xl
+              top-20 left-10 animate-pulseSlow"></div>
+  <div class="absolute w-80 h-80 bg-neonViolet opacity-25 blur-3xl
+              bottom-20 right-10 animate-pulseSlow"></div>
+
+  <!-- Contenido -->
+  <div class="relative z-10 max-w-5xl text-center px-6">
+    <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6">
+      Convertimos
+      <span class="bg-clip-text text-transparent
+                   bg-gradient-to-r from-neonBlue to-neonViolet">
+        contenido largo
+      </span><br>
+      en medios que generan impacto
+    </h1>
+
+    <p class="text-muted text-xl max-w-3xl mx-auto mb-10">
+      Edición estratégica, distribución inteligente y análisis con IA
+      para marcas, agencias y líderes de opinión.
+    </p>
+
+    <div class="flex flex-col sm:flex-row justify-center gap-6">
+      <a href="#contacto"
+         class="px-10 py-5 rounded-xl bg-gradient-to-r
+                from-neonBlue to-neonViolet text-bg font-semibold
+                shadow-glowBlue hover:scale-110 transition-all">
+        Agenda una llamada
+      </a>
+
+      <a href="#servicios"
+         class="px-10 py-5 rounded-xl border border-neonBlue/40
+                hover:bg-neonBlue/10 transition">
+        Ver cómo trabajamos
+      </a>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- PROBLEMA -->
+<section class="py-28 px-6 bg-[#070a14] parallax">
+  <div class="max-w-4xl mx-auto text-center">
+    <h2 class="text-4xl font-bold mb-6">
+      Tener contenido no es suficiente
+    </h2>
+    <p class="text-muted text-lg mb-8">
+      Entrevistas, podcasts o charlas que se quedan guardadas,
+      se publican sin estrategia o no generan impacto.
+    </p>
+    <p class="text-2xl font-semibold text-neonBlue">
+      El problema no es el contenido.<br>
+      Es el proceso.
+    </p>
+  </div>
+</section>
+
+<!-- SOLUCIÓN -->
+<section class="py-28 px-6 relative">
+  <div class="absolute inset-0 bg-gradient-to-b from-transparent to-[#070a14]"></div>
+
+  <div class="relative max-w-6xl mx-auto">
+    <h2 class="text-4xl font-bold text-center mb-14">
+      Zemper Media House
+    </h2>
+
+    <div class="grid md:grid-cols-3 gap-10">
+      <div class="bg-[#0b1020] p-10 rounded-2xl hover:shadow-glowBlue hover:-translate-y-2 transition-all">
+        <h3 class="text-xl font-semibold mb-3 text-neonBlue">Edición estratégica</h3>
+        <p class="text-muted">
+          Pensada para formatos reales y consumo digital actual.
+        </p>
+      </div>
+
+      <div class="bg-[#0b1020] p-10 rounded-2xl hover:shadow-glowViolet hover:-translate-y-2 transition-all">
+        <h3 class="text-xl font-semibold mb-3 text-neonViolet">Distribución inteligente</h3>
+        <p class="text-muted">
+          Cada plataforma con su propio lenguaje y ritmo.
+        </p>
+      </div>
+
+      <div class="bg-[#0b1020] p-10 rounded-2xl hover:shadow-glowBlue hover:-translate-y-2 transition-all">
+        <h3 class="text-xl font-semibold mb-3 text-neonBlue">Tecnología propia</h3>
+        <p class="text-muted">
+          Automatización real para escalar sin perder calidad.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- IA -->
+<section class="py-28 px-6 bg-[#070a14]">
+  <div class="max-w-4xl mx-auto text-center">
+    <h2 class="text-4xl font-bold mb-6">
+      No adivinamos qué publicar.<br>
+      <span class="text-neonPink">Lo analizamos.</span>
+    </h2>
+
+    <p class="text-muted text-lg mb-12">
+      Usamos inteligencia artificial para analizar tus videos y detectar
+      qué tipo de contenido te favorece más.
+    </p>
+
+    <p class="text-xl font-semibold text-neonBlue">
+      Creatividad humana, respaldada por datos.
+    </p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="contacto" class="py-28 px-6 text-center relative">
+  <div class="absolute inset-0 bg-gradient-to-t from-[#0b1020] to-bg"></div>
+
+  <div class="relative z-10">
+    <h2 class="text-4xl font-bold mb-6">
+      ¿Tienes contenido y no sabes cómo escalarlo?
+    </h2>
+    <p class="text-muted mb-10">
+      Convirtámoslo en un sistema que sí genere impacto.
+    </p>
+
+    <a href="#"
+       class="inline-block px-12 py-6 bg-gradient-to-r from-neonViolet to-neonPink
+              text-bg font-semibold rounded-xl shadow-glowViolet hover:scale-110 transition">
+      Agenda una llamada
+    </a>
+  </div>
+</section>
+
+</body>
+</html>

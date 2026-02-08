@@ -81,6 +81,12 @@ def _descargar_youtube(
             return ydl.prepare_filename(info)
     except DownloadError as e:
         msg = str(e)
+        if ("Sign in to confirm you're not a bot" in msg) or ("not a bot" in msg) or ("confirm you\u2019re not a bot" in msg):
+            raise DownloadError(
+                "YouTube esta bloqueando la descarga (verificacion anti-bot). "
+                "Solucion: pasar cookies del navegador (por ejemplo: edge o chrome). "
+                "En la app: completa 'Cookies navegador' con edge/chrome/firefox (ej: chrome:Default) y reintenta."
+            )
         if retry_update and ("403" in msg or "HTTP Error 403" in msg):
             _actualizar_yt_dlp(log_fn=log_fn)
             return _descargar_youtube(
