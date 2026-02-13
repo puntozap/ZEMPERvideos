@@ -12,6 +12,8 @@ from ui.tabs import (
     audio_tab,
     cortar_visualizador_tab,
     corte_individual_tab,
+    overlay_imagenes_tab,
+    musica_fondo_tab,
     corte_tab,
     corte_visualizer_tab,
     drive_config_tab,
@@ -158,6 +160,9 @@ def iniciar_app(procesar_video_fn):
     corte_tabs.pack(fill="both", expand=True, padx=6, pady=6)
     corte_tabs.add("Corte editado")
     corte_tabs.add("Corte individual")
+    corte_tabs.add("Corte sin bordes")
+    corte_tabs.add("Música")
+    corte_tabs.add("Imágenes")
     corte_tabs.add("Visualizador")
     corte_tabs.add("Pegar visualizador")
 
@@ -179,6 +184,9 @@ def iniciar_app(procesar_video_fn):
 
     tab_corte = corte_tabs.tab("Corte editado")
     tab_ind = corte_tabs.tab("Corte individual")
+    tab_sin_bordes = corte_tabs.tab("Corte sin bordes")
+    tab_musica = corte_tabs.tab("Música")
+    tab_imagenes = corte_tabs.tab("Imágenes")
     tab_srt = sub_tabs.tab("Generar subtitulos")
     tab_sub = sub_tabs.tab("Subtitular video")
     tab_clips = ia_tabs.tab("IA Clips")
@@ -222,6 +230,34 @@ def iniciar_app(procesar_video_fn):
     })
     ind_scroll = ind_api["scroll"]
     actualizar_etiquetas_rango_ind = ind_api["actualizar_etiquetas_rango_ind"]
+
+    corte_tab.create_tab(tab_sin_bordes, {
+        "estado": estado,
+        "rango": rango,
+        "log": log,
+        "log_global": log,
+        "log_seccion": log_seccion,
+        "limpiar_entry": limpiar_entry,
+        "alerta_busy": alerta_busy,
+        "abrir_videos": abrir_videos,
+        "stop_control": stop_control,
+        "procesar_video_fn": procesar_video_fn,
+        "beep_fin": beep_fin,
+        "modo_sin_bordes": True,
+        "titulo_seccion": "Corte sin bordes",
+    })
+
+    musica_fondo_tab.create_tab(tab_musica, {
+        "estado": estado,
+        "log": log,
+        "log_global": log,
+    })
+
+    overlay_imagenes_tab.create_tab(tab_imagenes, {
+        "estado": estado,
+        "log": log,
+        "log_global": log,
+    })
 
     tab_visual = corte_tabs.tab("Visualizador")
     tab_pegar_visual = corte_tabs.tab("Pegar visualizador")

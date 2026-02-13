@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZemperVideos · De un video largo a piezas listas para todas las redes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0e13;
+      --panel: #141a24;
+      --paper: #f7f4ee;
+      --ink: #0b0e13;
+      --muted: #5b6472;
+      --accent: #ff6b4a;
+      --accent-2: #64d8ff;
+      --accent-3: #f3c75f;
+      --line: rgba(11, 14, 19, 0.12);
+      --shadow: 0 12px 30px rgba(11, 14, 19, 0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .topbar-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand {
+      font-weight: 700;
+      font-size: 1.2rem;
+      letter-spacing: 0.02em;
+    }
+    .brand span {
+      font-family: "Fraunces", serif;
+      color: var(--accent);
+    }
+    .btn {
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 600;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(120deg, var(--accent), #ff9a63);
+      color: #0b0e13;
+      box-shadow: 0 12px 24px rgba(255, 107, 74, 0.35);
+    }
+    .btn-primary:active { transform: translateY(2px); }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 30px rgba(255, 107, 74, 0.45); }
+
+    .app {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 220px 360px 1fr;
+      gap: 18px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 520px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .panel:hover { transform: translateY(-3px); box-shadow: 0 18px 36px rgba(11, 14, 19, 0.18); }
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fff;
+    }
+    .panel-header small { color: var(--muted); }
+    .panel-body { padding: 14px 14px; }
+
+    .nav-list { list-style: none; display: grid; gap: 6px; }
+    .nav-btn {
+      width: 100%;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      background: transparent;
+      transition: background 0.15s ease, border 0.15s ease;
+      font-weight: 600;
+    }
+    .nav-btn:hover { background: rgba(255, 107, 74, 0.08); }
+    .nav-btn.is-active {
+      background: rgba(255, 107, 74, 0.14);
+      border-color: rgba(255, 107, 74, 0.35);
+    }
+
+    .list-item {
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      padding: 14px 12px;
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 12px;
+      border-radius: 12px;
+      transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .list-item:hover {
+      background: rgba(11, 14, 19, 0.04);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 20px rgba(11, 14, 19, 0.08);
+    }
+    .list-item.is-active {
+      background: rgba(100, 216, 255, 0.18);
+      border: 1px solid rgba(100, 216, 255, 0.45);
+    }
+    .list-item h4 { font-size: 1rem; margin-bottom: 4px; }
+    .list-item p { color: var(--muted); font-size: 0.9rem; }
+    .emoji {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: radial-gradient(circle at top, rgba(100, 216, 255, 0.45), rgba(255, 107, 74, 0.18));
+      font-size: 1.1rem;
+      transition: transform 0.2s ease;
+    }
+    .list-item:hover .emoji { transform: scale(1.08) rotate(-3deg); }
+
+    .reader {
+      padding: 20px;
+      display: grid;
+      gap: 20px;
+    }
+    .reader h1, .reader h2 {
+      font-family: "Fraunces", serif;
+    }
+    .reader p { color: #222833; line-height: 1.65; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(100, 216, 255, 0.2);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    }
+    .card {
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 28px rgba(11, 14, 19, 0.12);
+      border-color: rgba(255, 107, 74, 0.25);
+    }
+    .card strong { display: block; margin-bottom: 6px; }
+
+    .cta {
+      padding: 16px;
+      border-radius: 16px;
+      background: linear-gradient(130deg, rgba(255, 107, 74, 0.18), rgba(100, 216, 255, 0.18));
+      border: 1px solid rgba(255, 107, 74, 0.25);
+    }
+    .cta .cta-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      margin-top: 14px;
+    }
+    .cta-tile {
+      border-radius: 14px;
+      border: 1px solid rgba(11, 14, 19, 0.08);
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .cta-tile:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 28px rgba(11, 14, 19, 0.12);
+    }
+    .cta-tile span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+    .demo-media {
+      margin-top: 18px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+    .demo-media img {
+      width: 100%;
+      display: block;
+      height: auto;
+    }
+    .glow {
+      position: relative;
+      overflow: hidden;
+    }
+    .glow::after {
+      content: "";
+      position: absolute;
+      inset: -60px;
+      background: radial-gradient(circle at top, rgba(255, 154, 99, 0.2), transparent 60%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .glow:hover::after { opacity: 1; }
+
+    @media (max-width: 1024px) {
+      .app { grid-template-columns: 1fr; }
+      .panel { min-height: unset; }
+      .panel-left, .panel-center { display: none; }
+      .app.list-view .panel-center { display: block; }
+      .app.read-view .panel-right { display: block; }
+      .app.menu-view .panel-left { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button id="burger" class="btn" aria-label="Menú">☰</button>
+      <div class="brand">Zemper<span>Videos</span></div>
+      <div style="margin-left:auto; display:flex; gap:10px;">
+        <a class="btn" href="https://github.com/puntozap/ZEMPERvideos" aria-label="GitHub" title="GitHub">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style="display:block;">
+            <path fill="currentColor" d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.5-1.3-1.2-1.6-1.2-1.6-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 .1.8 1.9 1.9 2.3.5.4 1.4.6 2.2.5.1-.8.4-1.4.7-1.7-2.6-.3-5.3-1.3-5.3-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6 0C17.6 6.4 18.6 6.7 18.6 6.7c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.2 0 4.6-2.7 5.6-5.3 5.9.4.3.8 1 .8 2.1v3.1c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"/>
+          </svg>
+        </a>
+        <a class="btn btn-primary" href="mailto:hola@zempervideos.com">Hablemos</a>
+      </div>
+    </div>
+  </header>
+
+  <div id="app" class="app list-view">
+    <aside class="panel panel-left">
+      <div class="panel-header">
+        <div>
+          <div style="font-weight:600;">Menú</div>
+          <small>Secciones</small>
+        </div>
+        <button id="closeMenu" class="btn">✕</button>
+      </div>
+      <div class="panel-body">
+        <ul class="nav-list" id="navList">
+          <li><button class="nav-btn" data-section="inicio">Qué es ZemperVideos</button></li>
+          <li><button class="nav-btn" data-section="house">Qué es Zemper Media House</button></li>
+          <li><button class="nav-btn" data-section="sistema">Sistema y beneficios</button></li>
+          <li><button class="nav-btn" data-section="edicion">Edición</button></li>
+          <li><button class="nav-btn" data-section="propagacion">Propagación</button></li>
+          <li><button class="nav-btn" data-section="contacto">Contacto</button></li>
+        </ul>
+      </div>
+    </aside>
+
+    <section class="panel panel-center">
+      <div class="panel-header">
+        <div>
+          <small>Lista</small>
+          <div style="font-weight:600;">Narrativa ZemperVideos</div>
+        </div>
+        <button id="openMenu" class="btn">☰</button>
+      </div>
+      <div class="panel-body" id="messageList">
+        <button class="list-item is-active glow" data-msg="problema">
+          <div class="emoji">⏱️</div>
+          <div>
+            <h4>El cuello de botella</h4>
+            <p>Editar lento, publicar tarde y perder momentum.</p>
+          </div>
+        </button>
+        <button class="list-item glow" data-msg="solucion">
+          <div class="emoji">⚙️</div>
+          <div>
+            <h4>El sistema Zemper</h4>
+            <p>Corte, subtítulos, IA y distribución integrada.</p>
+          </div>
+        </button>
+        <button class="list-item glow" data-msg="tabs_edicion">
+          <div class="emoji">✂️</div>
+          <div>
+            <h4>Edición</h4>
+            <p>Todo el flujo para cortar, subtitular y mejorar.</p>
+          </div>
+        </button>
+        <button class="list-item glow" data-msg="tabs_propagacion">
+          <div class="emoji">📡</div>
+          <div>
+            <h4>Propagación</h4>
+            <p>Publicación y distribución en todas las redes.</p>
+          </div>
+        </button>
+        <button class="list-item glow" data-msg="cta">
+          <div class="emoji">📣</div>
+          <div>
+            <h4>Listo para activar</h4>
+            <p>Agenda y armamos el flujo ideal para tu marca.</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <article class="panel panel-right">
+      <div class="panel-header">
+        <div>
+          <small>Lectura</small>
+        <div id="readerTitle" style="font-weight:600;">Qué es ZemperVideos</div>
+        </div>
+        <button id="backToList" class="btn">←</button>
+      </div>
+      <div class="reader" id="readerBody">
+        <section>
+          <span class="tag">ZemperVideos</span>
+          <h1>De un video largo a piezas listas para todas las redes, en minutos.</h1>
+          <p>
+            ZemperVideos automatiza el flujo completo: carga tu video, corta por segmentos, genera
+            subtítulos, aplica visualizadores y prepara los textos para publicar. Todo desde una sola interfaz.
+          </p>
+                    <div class="demo-media glow">
+            <img src="demo%20zempervideos.gif" alt="Demo de ZemperVideos en acci?n" />
+          </div>
+
+          </div>
+        </section>
+      </div>
+    </article>
+  </div>
+
+  <script>
+    const app = document.getElementById('app');
+    document.getElementById('burger').addEventListener('click', () => {
+      app.className = 'app menu-view';
+    });
+    document.getElementById('openMenu').addEventListener('click', () => {
+      app.className = 'app menu-view';
+    });
+    document.getElementById('closeMenu').addEventListener('click', () => {
+      app.className = 'app list-view';
+    });
+    document.getElementById('backToList').addEventListener('click', () => {
+      app.className = 'app list-view';
+    });
+
+    const titleEl = document.getElementById('readerTitle');
+    const bodyEl = document.getElementById('readerBody');
+    const templates = {
+      hero: {
+        title: 'Qué es Zemper Media House',
+        html: `
+          <section>
+            <span class="tag">Zemper Media House</span>
+            <h1>Creamos contenido multired partiendo de un video largo.</h1>
+            <p>
+              Somos la casa creativa que convierte un video largo en un sistema de piezas listas para publicar.
+              Operamos con <strong>ZemperVideos</strong>, nuestra herramienta propia para cortar, subtitular y distribuir.
+            </p>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+              <div class="card glow"><strong>Estrategia</strong><p>Definimos formatos, ritmo y objetivos por red.</p></div>
+              <div class="card glow"><strong>Producción</strong><p>Edición por lotes con estándares de marca.</p></div>
+              <div class="card glow"><strong>Distribución</strong><p>Publicación ordenada desde un solo lugar.</p></div>
+            </div>
+          </section>
+        `
+      },
+      house: {
+        title: 'Qué es ZemperVideos',
+        html: `
+          <section>
+            <span class="tag">ZemperVideos</span>
+            <h1>La herramienta que convierte un video largo en un flujo multired.</h1>
+            <p>
+              ZemperVideos automatiza corte, subtítulos, visualizadores y preparación de textos.
+              Es el motor que usamos dentro de Zemper Media House para acelerar entregas.
+            </p>
+                        <div class="demo-media glow">
+              <img src="demo%20zempervideos.gif" alt="Demo de ZemperVideos en acci?n" />
+            </div>
+<div class="grid">
+              <div class="card glow"><strong>Automatización</strong><p>Menos pasos manuales, más volumen.</p></div>
+              <div class="card glow"><strong>Consistencia</strong><p>Mismo estándar en cada pieza.</p></div>
+              <div class="card glow"><strong>Centralización</strong><p>Todo en un solo lugar.</p></div>
+            </div>
+          </section>
+        `
+      },
+      problema: {
+        title: 'El cuello de botella',
+        html: `
+          <section>
+            <h2>Por qué se forma el cuello de botella</h2>
+            <p>
+              El problema no es grabar. El bloqueo aparece después: cada video largo exige recortes, subtítulos,
+              formatos verticales, textos y publicación en múltiples redes. Cuando todo se hace manualmente,
+              la producción se vuelve lenta y la oportunidad se enfría.
+            </p>
+            <div class="grid" style="margin-top:14px; grid-template-columns: repeat(2, minmax(0, 1fr));">
+              <div class="card glow">
+                <strong>Edición lenta</strong>
+                <p>Horas de corte manual para piezas que se publican tarde.</p>
+              </div>
+              <div class="card glow">
+                <strong>Saltos entre herramientas</strong>
+                <p>Exportar, renombrar, mover archivos y volver a renderizar consume tiempo real.</p>
+              </div>
+              <div class="card glow">
+                <strong>Sin sistema</strong>
+                <p>Sin un flujo definido, cada entrega se vuelve diferente y difícil de escalar.</p>
+              </div>
+              <div class="card glow">
+                <strong>Poco alcance</strong>
+                <p>Un solo video largo no aprovecha el potencial de cada red.</p>
+              </div>
+            </div>
+          </section>
+        `
+      },
+      solucion: {
+        title: 'El sistema Zemper',
+        html: `
+          <section>
+            <h2>Un flujo completo en una sola cabina</h2>
+            <p>
+              ZemperVideos une corte, subtítulos, IA y distribución. Todo lo necesario para pasar de un
+              video largo a clips listos para publicar, coordinado por Zemper Media House.
+            </p>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+              <div class="card glow"><strong>Corte editado</strong><p>Divide por minutos, rango por sliders y salida en lote.</p></div>
+              <div class="card glow"><strong>Subtítulos</strong><p>SRT automáticos y subtítulos quemados.</p></div>
+              <div class="card glow"><strong>IA</strong><p>Recomendaciones de clips, títulos y hashtags.</p></div>
+              <div class="card glow"><strong>Distribución</strong><p>Subida a YouTube/Instagram, export a Drive/WhatsApp.</p></div>
+            </div>
+          </section>
+        `
+      },
+      tabs_edicion: {
+        title: 'Tabs de Edición',
+        html: `
+          <section>
+            <h2>Edición</h2>
+            <p>Todo lo necesario para transformar un video largo en piezas listas.</p>
+            <div class="grid">
+              <div class="card glow"><strong>Corte editado</strong><p>Segmenta en minutos, vertical 9:16 y batch.</p></div>
+              <div class="card glow"><strong>Corte individual</strong><p>Recortes manuales por tiempos exactos.</p></div>
+              <div class="card glow"><strong>Música</strong><p>Fondo musical con control de volumen.</p></div>
+              <div class="card glow"><strong>Imágenes</strong><p>Overlays y fondos para estética de marca.</p></div>
+              <div class="card glow"><strong>Visualizador</strong><p>Genera y pega visualizador de audio.</p></div>
+              <div class="card glow"><strong>Subtítulos</strong><p>Genera SRT y quema en el video.</p></div>
+              <div class="card glow"><strong>IA Clips</strong><p>Recomendaciones de cortes desde SRT.</p></div>
+              <div class="card glow"><strong>IA TikTok</strong><p>Título, descripción y hashtags listos.</p></div>
+            </div>
+          </section>
+        `
+      },
+      tabs_propagacion: {
+        title: 'Tabs de Propagación',
+        html: `
+          <section>
+            <h2>Propagación</h2>
+            <p>Distribuye y publica el contenido en todos los canales.</p>
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+              <div class="card glow"><strong>Descargas</strong><p>Audio MP3 y YouTube MP3/MP4.</p></div>
+              <div class="card glow"><strong>YouTube</strong><p>Subida, lote y miniaturas.</p></div>
+              <div class="card glow"><strong>Instagram</strong><p>OAuth y subida de Reels.</p></div>
+              <div class="card glow"><strong>WhatsApp/Drive</strong><p>Distribución rápida y organizada.</p></div>
+            </div>
+          </section>
+        `
+      },
+      cta: {
+        title: 'Listo para activar',
+        html: `
+          <section class="cta">
+            <h2>Listo para convertir tu contenido en un sistema?</h2>
+            <p>Agenda una llamada o mira cómo funciona con ejemplos reales.</p>
+            <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+              <a class="btn btn-primary" href="mailto:hola@zempervideos.com">Escribir ahora</a>
+              <a class="btn" href="#inicio">Ver inicio</a>
+            </div>
+            <div class="cta-grid">
+              <div class="cta-tile glow">
+                <span>▶ Ver cómo funciona</span>
+                <p>Videos cortos mostrando el flujo completo de ZemperVideos.</p>
+                <a class="btn" href="#">Ver demos</a>
+              </div>
+              <div class="cta-tile glow">
+                <span>⬇ Descargar herramienta</span>
+                <p>Obtén la última versión y prueba el sistema en tu contenido.</p>
+                <a class="btn" href="#">Descargar</a>
+              </div>
+            </div>
+          </section>
+        `
+      }
+    };
+
+    function openMessage(key) {
+      const data = templates[key];
+      if (!data) return;
+      titleEl.textContent = data.title;
+      bodyEl.innerHTML = data.html;
+      document.querySelectorAll('#messageList .list-item').forEach(el => el.classList.remove('is-active'));
+      const activeBtn = document.querySelector(`#messageList .list-item[data-msg="${key}"]`);
+      if (activeBtn) activeBtn.classList.add('is-active');
+      if (window.innerWidth < 1024) {
+        app.className = 'app read-view';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+
+    function setNavActive(sectionKey) {
+      document.querySelectorAll('#navList .nav-btn').forEach(el => el.classList.remove('is-active'));
+      if (!sectionKey) return;
+      const target = document.querySelector(`#navList .nav-btn[data-section="${sectionKey}"]`);
+      if (target) target.classList.add('is-active');
+    }
+
+    document.querySelectorAll('#messageList button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msg = btn.getAttribute('data-msg');
+        openMessage(msg);
+        const map = {
+          hero: 'house',
+          house: 'inicio',
+          problema: null,
+          solucion: 'sistema',
+          tabs_edicion: 'edicion',
+          tabs_propagacion: 'propagacion',
+          cta: 'contacto',
+        };
+        setNavActive(map[msg] || null);
+      });
+    });
+
+    document.querySelectorAll('#navList button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        setNavActive(btn.getAttribute('data-section'));
+        const sec = btn.getAttribute('data-section');
+        if (sec === 'inicio') openMessage('house');
+        if (sec === 'house') openMessage('hero');
+        if (sec === 'sistema') openMessage('solucion');
+        if (sec === 'edicion') openMessage('tabs_edicion');
+        if (sec === 'propagacion') openMessage('tabs_propagacion');
+        if (sec === 'contacto') openMessage('cta');
+      });
+    });
+  </script>
+</body>
+</html>

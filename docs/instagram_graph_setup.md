@@ -79,7 +79,17 @@ En **Transcriptor de Video → Instagram → Configuración**:
 - **Access Token**: pega el token generado.
 - Click en **Guardar Credenciales**.
 
-## 8) Publicar Reel (subida directa)
+## 8) OAuth con Redirect URI (cuando uses "Conectar con Facebook")
+La app levanta un servidor local para capturar el `code`.
+- **Redirect URI recomendado**: `http://127.0.0.1:8766/callback`
+- **Puerto correcto**: `8766` (es el que escucha la app).
+
+Si usas **ngrok**:
+- Inicia ngrok apuntando al puerto correcto: `ngrok http 8766`
+- Usa el dominio de ngrok como Redirect URI en Meta.
+- Si ngrok apunta a `8000`, verás `ERR_NGROK_8012` / `502` porque no hay servicio en ese puerto.
+
+## 9) Publicar Reel (subida directa)
 En **Instagram → Subir Reel**:
 1. Selecciona el archivo `.mp4`.
 2. Escribe caption.
@@ -87,13 +97,12 @@ En **Instagram → Subir Reel**:
 
 La app usa **resumable upload** (directo a servidores de Instagram), sin Drive.
 
-## 9) Errores comunes
+## 10) Errores comunes
 - **Error 190 (Cannot parse access token)**: token inválido o mal copiado.
 - **Error 100 / subcode 33**: estás usando ID de Página en lugar del IG Account ID.
 - **No aparece instagram_business_account**: IG no está vinculada a la Página.
 - **API access deactivated**: reactivar en App Dashboard.
 
-## 10) Notas importantes
+## 11) Notas importantes
 - Los tokens de usuario expiran; renueva cuando deje de funcionar.
 - En **modo Development**, solo los usuarios con rol en la app pueden publicar.
-

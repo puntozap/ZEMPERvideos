@@ -63,6 +63,7 @@ def create_tab(parent, context):
             return f"{h:02d}:{m:02d}:{s:02d}"
         return f"{m:02d}:{s:02d}"
 
+
     ind_scroll = ctk.CTkScrollableFrame(left, corner_radius=0)
     ind_scroll.grid(row=0, column=0, sticky="nsew")
     ind_scroll.grid_columnconfigure(0, weight=1)
@@ -367,7 +368,6 @@ def create_tab(parent, context):
     lbl_duracion_ind.grid(row=4, column=0, sticky="w")
     lbl_duracion_val_ind = ctk.CTkLabel(range_ind_card, text="00:00", font=ctk.CTkFont(size=12))
     lbl_duracion_val_ind.grid(row=4, column=2, sticky="e")
-
     log_card, _log_widget, log_local = helpers.create_log_panel(
         container,
         title="Actividad",
@@ -449,6 +449,26 @@ def create_tab(parent, context):
         except Exception:
             outro_font = 54
         outro_color = entry_outro_color.get().strip() or "#FFFFFF"
+        musica_habilitada = bool(estado.get("musica_fondo_habilitada", False))
+        musica_path = estado.get("musica_fondo_path") if musica_habilitada else None
+        try:
+            musica_vol = float(estado.get("musica_fondo_volumen", 0.25))
+        except Exception:
+            musica_vol = 0.25
+        try:
+            musica_inicio = float(estado.get("musica_fondo_inicio", 0.0))
+        except Exception:
+            musica_inicio = 0.0
+        musica_fin = estado.get("musica_fondo_fin", None)
+        try:
+            if musica_fin is not None:
+                musica_fin = float(musica_fin)
+        except Exception:
+            musica_fin = None
+        try:
+            musica_inicio_video = float(estado.get("musica_fondo_inicio_video", 0.0))
+        except Exception:
+            musica_inicio_video = 0.0
 
         def run_individual():
             try:
@@ -469,6 +489,11 @@ def create_tab(parent, context):
                     outro_seconds,
                     outro_font,
                     outro_color,
+                    musica_path,
+                    musica_vol,
+                    musica_inicio,
+                    musica_fin,
+                    musica_inicio_video,
                     None,
                     log,
                 )
@@ -584,6 +609,26 @@ def create_tab(parent, context):
         except Exception:
             outro_font = 54
         outro_color = entry_outro_color.get().strip() or "#FFFFFF"
+        musica_habilitada = bool(estado.get("musica_fondo_habilitada", False))
+        musica_path = estado.get("musica_fondo_path") if musica_habilitada else None
+        try:
+            musica_vol = float(estado.get("musica_fondo_volumen", 0.25))
+        except Exception:
+            musica_vol = 0.25
+        try:
+            musica_inicio = float(estado.get("musica_fondo_inicio", 0.0))
+        except Exception:
+            musica_inicio = 0.0
+        musica_fin = estado.get("musica_fondo_fin", None)
+        try:
+            if musica_fin is not None:
+                musica_fin = float(musica_fin)
+        except Exception:
+            musica_fin = None
+        try:
+            musica_inicio_video = float(estado.get("musica_fondo_inicio_video", 0.0))
+        except Exception:
+            musica_inicio_video = 0.0
 
         def run_auto_ind():
             try:
@@ -604,6 +649,11 @@ def create_tab(parent, context):
                     outro_seconds,
                     outro_font,
                     outro_color,
+                    musica_path,
+                    musica_vol,
+                    musica_inicio,
+                    musica_fin,
+                    musica_inicio_video,
                     None,
                     log,
                 )

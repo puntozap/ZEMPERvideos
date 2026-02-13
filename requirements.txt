@@ -37,3 +37,5 @@ torch==2.8.0
 tqdm==4.67.1
 typing_extensions==4.15.0
 urllib3==1.26.16
+fastapi==0.116.1
+uvicorn==0.35.0

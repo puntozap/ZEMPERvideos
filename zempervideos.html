@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZemperVideos | Presentacion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0e13;
+      --bg-2: #121723;
+      --panel: #151c2b;
+      --ink: #f6f4ef;
+      --muted: #c2c7d4;
+      --accent: #ff6b4a;
+      --accent-2: #6ae5ff;
+      --accent-3: #f3c75f;
+      --stroke: rgba(255, 255, 255, 0.12);
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Space Grotesk", sans-serif;
+      background: radial-gradient(circle at top, #1b2438 0%, #0b0e13 45%, #090b10 100%);
+      color: var(--ink);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 90vh;
+      display: grid;
+      align-items: center;
+      padding: 80px 0 60px;
+      overflow: hidden;
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 520px;
+      height: 520px;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.55;
+      z-index: 0;
+    }
+
+    .hero::before {
+      background: #ff7a59;
+      top: -160px;
+      left: -120px;
+    }
+
+    .hero::after {
+      background: #4fd7ff;
+      bottom: -240px;
+      right: -180px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 40px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero h1 {
+      font-family: "Fraunces", serif;
+      font-size: clamp(2.6rem, 4.2vw, 4.6rem);
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 520px;
+    }
+
+    .hero-actions {
+      margin-top: 32px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 26px;
+      border-radius: 999px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(130deg, var(--accent), #ff9d63);
+      color: #0b0e13;
+      box-shadow: 0 20px 35px rgba(255, 107, 74, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 25px 45px rgba(255, 107, 74, 0.5);
+    }
+
+    .btn-ghost {
+      border: 1px solid var(--stroke);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .hero-card {
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+      border: 1px solid var(--stroke);
+      border-radius: 20px;
+      padding: 26px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero-card h3 {
+      font-size: 1.2rem;
+      margin-bottom: 6px;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--stroke);
+    }
+
+    .stat span {
+      display: block;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent-3);
+    }
+
+    .section {
+      padding: 80px 0;
+    }
+
+    .section-title {
+      font-size: clamp(2rem, 3vw, 3rem);
+      margin-bottom: 12px;
+    }
+
+    .section-sub {
+      color: var(--muted);
+      max-width: 640px;
+    }
+
+    .bento {
+      margin-top: 40px;
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .bento-card {
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 24px;
+      border: 1px solid var(--stroke);
+      min-height: 200px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento-card::after {
+      content: "";
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      filter: blur(50px);
+      opacity: 0.45;
+      right: -40px;
+      top: -40px;
+      background: var(--accent-2);
+    }
+
+    .bento-card h4 {
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+    }
+
+    .flow {
+      margin-top: 50px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      gap: 18px;
+      align-items: start;
+      padding: 18px 22px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--stroke);
+    }
+
+    .flow-step span {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--accent-3);
+      font-weight: 700;
+    }
+
+    .grid-two {
+      display: grid;
+      gap: 28px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin-top: 36px;
+    }
+
+    .card {
+      border-radius: 16px;
+      padding: 22px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    }
+
+    .card strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .cta {
+      padding: 70px 0 90px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.06));
+      text-align: center;
+    }
+
+    .cta-box {
+      background: #0f1422;
+      border-radius: 20px;
+      padding: 40px 24px;
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+    }
+
+    footer {
+      padding: 30px 0 50px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.9rem;
+    }
+
+    .fade-up {
+      animation: fadeUp 0.9s ease both;
+    }
+
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fade-up,
+      .btn-primary:hover,
+      .btn-ghost:hover {
+        animation: none;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <p class="fade-up delay-1" style="letter-spacing: 0.3em; text-transform: uppercase; color: var(--accent-2); font-size: 0.78rem;">
+          ZemperVideos
+        </p>
+        <h1 class="fade-up delay-2">El estudio que convierte ideas en videos que venden, educan y posicionan.</h1>
+        <p class="fade-up delay-3">
+          Producimos contenido audiovisual para marcas, agencias y creadores que quieren impacto real.
+          Estrategia, guion, produccion y edicion con un sistema claro.
+        </p>
+        <div class="hero-actions fade-up delay-4">
+          <a class="btn btn-primary" href="#contacto">Agendar una llamada</a>
+          <a class="btn btn-ghost" href="#proceso">Ver el proceso</a>
+        </div>
+      </div>
+      <div class="hero-card fade-up delay-2">
+        <div>
+          <h3>Presentacion rapida</h3>
+          <p style="color: var(--muted);">
+            ZemperVideos es un sistema de produccion de video que acelera la entrega sin sacrificar calidad.
+            Te ayudamos a construir un flujo continuo de contenido.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span>2-6x</span>
+            velocidad de entrega vs procesos tradicionales
+          </div>
+          <div class="stat">
+            <span>1:1</span>
+            enfoque creativo por marca
+          </div>
+          <div class="stat">
+            <span>Full</span>
+            equipo creativo integrado
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="propuesta">
+    <div class="container">
+      <h2 class="section-title">Que es ZemperVideos</h2>
+      <p class="section-sub">
+        Una celula creativa para producir video estrategico: definimos el mensaje, construimos narrativa,
+        y entregamos piezas listas para cada canal.
+      </p>
+      <div class="bento">
+        <div class="bento-card fade-up delay-1">
+          <h4>Estrategia y guion</h4>
+          <p style="color: var(--muted);">
+            Workshops cortos para aterrizar objetivos, tono y formatos. Guiones listos para grabar.
+          </p>
+        </div>
+        <div class="bento-card fade-up delay-2">
+          <h4>Produccion inteligente</h4>
+          <p style="color: var(--muted);">
+            Grabaciones optimizadas y direccion creativa para maximizar material en cada sesion.
+          </p>
+        </div>
+        <div class="bento-card fade-up delay-3">
+          <h4>Edicion con sistema</h4>
+          <p style="color: var(--muted);">
+            Piezas maestras, recortes, reels y anuncios. Cada formato con ritmo y copy propio.
+          </p>
+        </div>
+        <div class="bento-card fade-up delay-4">
+          <h4>Distribucion y crecimiento</h4>
+          <p style="color: var(--muted);">
+            Calendario de salida, entregas en lotes y soporte para escalar el contenido.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="proceso">
+    <div class="container">
+      <h2 class="section-title">Proceso claro, resultados medibles</h2>
+      <p class="section-sub">
+        Una metodologia simple para que sepas exactamente en que etapa esta tu produccion.
+      </p>
+      <div class="flow">
+        <div class="flow-step fade-up delay-1">
+          <span>01</span>
+          <div>
+            <strong>Diagnostico</strong>
+            <p style="color: var(--muted);">Objetivos, audiencia, estilo y mensajes clave.</p>
+          </div>
+        </div>
+        <div class="flow-step fade-up delay-2">
+          <span>02</span>
+          <div>
+            <strong>Plan de contenido</strong>
+            <p style="color: var(--muted);">Mapa de formatos, guiones y calendario de grabacion.</p>
+          </div>
+        </div>
+        <div class="flow-step fade-up delay-3">
+          <span>03</span>
+          <div>
+            <strong>Produccion + edicion</strong>
+            <p style="color: var(--muted);">Captura, postproduccion, motion y entrega por plataformas.</p>
+          </div>
+        </div>
+        <div class="flow-step fade-up delay-4">
+          <span>04</span>
+          <div>
+            <strong>Entrega y optimizacion</strong>
+            <p style="color: var(--muted);">Iteraciones rapidas, aprendizaje y nuevas oleadas de contenido.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">Para quien es</h2>
+      <p class="section-sub">Si necesitas video constante sin perder la esencia de tu marca, aqui encajas.</p>
+      <div class="grid-two">
+        <div class="card fade-up delay-1">
+          <strong>Marcas en crecimiento</strong>
+          <p style="color: var(--muted);">Necesitan escalar contenido para ads, redes y website.</p>
+        </div>
+        <div class="card fade-up delay-2">
+          <strong>Agencias creativas</strong>
+          <p style="color: var(--muted);">Back office de produccion para multiplicar entregables.</p>
+        </div>
+        <div class="card fade-up delay-3">
+          <strong>Creadores y expertos</strong>
+          <p style="color: var(--muted);">Transformar conocimiento en video que posiciona.</p>
+        </div>
+        <div class="card fade-up delay-4">
+          <strong>Equipos internos</strong>
+          <p style="color: var(--muted);">Refuerzo creativo para mantener una cadencia profesional.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" id="contacto">
+    <div class="container">
+      <div class="cta-box">
+        <h2 class="section-title">Listo para convertir tu contenido en un sistema?</h2>
+        <p class="section-sub" style="margin: 12px auto 28px;">
+          Agenda una llamada y construimos una ruta de produccion a tu medida.
+        </p>
+        <div class="hero-actions" style="justify-content: center;">
+          <a class="btn btn-primary" href="mailto:hola@zempervideos.com">Escribir a ZemperVideos</a>
+          <a class="btn btn-ghost" href="#">Ver portafolio</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    ZemperVideos. Produccion audiovisual con estrategia.
+  </footer>
+</body>
+</html>

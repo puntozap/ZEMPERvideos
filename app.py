@@ -3,7 +3,7 @@ from core.workflow import procesar_video
 
 if __name__ == "__main__":
     ventana, barra, log, entrada_url = iniciar_app(
-        lambda path, es_youtube=False, es_audio=False, minutos_por_parte=5, inicio_min=None, fin_min=None, dividir_video=True, vertical_tiktok=False, vertical_orden="LR", recorte_top=0.12, recorte_bottom=0.12, generar_srt=True, fondo_path=None, fondo_estilo="fill", fondo_escala=0.92, solo_video=False, visualizador=False, posicion_visualizador="centro", visualizador_opacidad=0.65, visualizador_color="#FFFFFF", visualizador_margen=0, visualizador_exposicion=0.0, visualizador_contraste=1.0, visualizador_saturacion=1.0, visualizador_temperatura=0.0, modo_visualizador="lighten", visualizador_overlay_image=None, visualizador_overlay_start=0.0, visualizador_overlay_duration=2.0:
+        lambda path, es_youtube=False, es_audio=False, minutos_por_parte=5, inicio_min=None, fin_min=None, dividir_video=True, vertical_tiktok=False, vertical_orden="LR", recorte_top=0.12, recorte_bottom=0.12, recorte_bordes=False, recorte_manual_top=0.0, recorte_manual_bottom=0.0, generar_srt=True, fondo_path=None, fondo_estilo="fill", fondo_escala=0.92, fondo_usar_tamano_imagen=False, fondo_inset_pct=None, fondo_zoom=1.0, fondo_cintas=None, fondo_mensajes=None, fondo_bg_crop_top=0.0, fondo_bg_crop_bottom=0.0, solo_video=False, visualizador=False, posicion_visualizador="centro", visualizador_opacidad=0.65, visualizador_color="#FFFFFF", visualizador_margen=0, visualizador_exposicion=0.0, visualizador_contraste=1.0, visualizador_saturacion=1.0, visualizador_temperatura=0.0, modo_visualizador="lighten", visualizador_overlay_image=None, visualizador_overlay_start=0.0, visualizador_overlay_duration=2.0, musica_path=None, musica_volumen=0.25, musica_inicio=0.0, musica_fin=None, musica_inicio_video=0.0:
         procesar_video(
             path,
             es_youtube,
@@ -16,10 +16,20 @@ if __name__ == "__main__":
             vertical_orden,
             recorte_top,
             recorte_bottom,
+            recorte_bordes,
+            recorte_manual_top,
+            recorte_manual_bottom,
             generar_srt,
             fondo_path,
             fondo_estilo,
             fondo_escala,
+            fondo_usar_tamano_imagen,
+            fondo_inset_pct,
+            fondo_zoom,
+            fondo_cintas,
+            fondo_mensajes,
+            fondo_bg_crop_top,
+            fondo_bg_crop_bottom,
             solo_video,
             barra,
             log,
@@ -36,6 +46,11 @@ if __name__ == "__main__":
             overlay_image=visualizador_overlay_image,
             overlay_start=visualizador_overlay_start,
             overlay_duration=visualizador_overlay_duration,
+            musica_path=musica_path,
+            musica_volumen=musica_volumen,
+            musica_inicio=musica_inicio,
+            musica_fin=musica_fin,
+            musica_inicio_video=musica_inicio_video,
         )
     )
     ventana.mainloop()

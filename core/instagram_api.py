@@ -1,6 +1,10 @@
 import requests
 import time
 import os
+import json
+import subprocess
+from pathlib import Path
+from fractions import Fraction
 
 from core.instagram_auth import exchange_long_lived_token, token_expired
 
@@ -74,7 +78,7 @@ class InstagramUploader:
             log_fn("? IG: Error. El video no se proces? correctamente.")
         return None
 
-    def upload_reel_resumable(self, file_path: str, caption: str = "", share_to_feed: bool = True, log_fn=print):
+    def upload_reel_resumable(self, file_path: str, caption: str = "", share_to_feed: bool = True, log_fn=print, validate: bool = True, auto_fix: bool = True, chunk_size_mb: int | None = None):
         """
         Sube un Reel usando carga resumible (rupload) sin depender de URLs p?blicas.
         Flujo:
@@ -84,6 +88,17 @@ class InstagramUploader:
         4) Publicar.
         """
         self._ensure_token(log_fn=log_fn)
+        if validate:
+            if not self._validate_video_for_ig(file_path, log_fn=log_fn):
+                if auto_fix:
+                    fixed_path = self._reencode_for_ig(file_path, log_fn=log_fn)
+                    if not fixed_path:
+                        return None
+                    file_path = fixed_path
+                    if not self._validate_video_for_ig(file_path, log_fn=log_fn):
+                        return None
+                else:
+                    return None
         if log_fn:
             log_fn("?? IG: Creando contenedor resumible...")
         container_id, upload_uri = self._create_resumable_container(caption, share_to_feed, log_fn)
@@ -91,7 +106,7 @@ class InstagramUploader:
             return None
         if log_fn:
             log_fn("?? IG: Subiendo archivo directamente a Instagram...")
-        if not self._upload_resumable_file(upload_uri, file_path, log_fn):
+        if not self._upload_resumable_file(upload_uri, file_path, log_fn, chunk_size_mb=chunk_size_mb):
             return None
         if log_fn:
             log_fn(f"? IG: Esperando procesamiento (ID: {container_id})...")
@@ -188,25 +203,73 @@ class InstagramUploader:
             self._log_error(e, "creando contenedor resumible IG", log_fn)
             return None, None
 
-    def _upload_resumable_file(self, upload_uri: str, file_path: str, log_fn):
+    def _upload_resumable_file(self, upload_uri: str, file_path: str, log_fn, chunk_size_mb: int | None = None):
         if not os.path.exists(file_path):
             if log_fn:
                 log_fn(f"❌ Archivo no encontrado: {file_path}")
             return False
         file_size = os.path.getsize(file_path)
-        headers = {
+        base_headers = {
             "Authorization": f"OAuth {self.access_token}",
-            "offset": "0",
             "file_size": str(file_size),
             "Content-Type": "application/octet-stream",
-            "Content-Length": str(file_size),
         }
         try:
+            # If no chunk size is provided, send the full file in one request (per IG rupload docs).
+            if not chunk_size_mb:
+                headers = {
+                    **base_headers,
+                    "offset": "0",
+                    "Content-Length": str(file_size),
+                }
+                with open(file_path, "rb") as f:
+                    r = requests.post(upload_uri, headers=headers, data=f)
+                r.raise_for_status()
+                return True
+
+            chunk_size = max(1, int(chunk_size_mb)) * 1024 * 1024
+            sent = 0
             with open(file_path, "rb") as f:
-                payload = f.read()
-            r = requests.post(upload_uri, headers=headers, data=payload)
-            r.raise_for_status()
-            return True
+                while sent < file_size:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    headers = {
+                        **base_headers,
+                        "offset": str(sent),
+                        "Content-Length": str(len(chunk)),
+                    }
+                    r = requests.post(upload_uri, headers=headers, data=chunk)
+                    if r.status_code >= 400:
+                        if log_fn:
+                            log_fn(f"❌ IG chunk error HTTP {r.status_code}")
+                            preview = (r.text or "").strip()[:500]
+                            if preview:
+                                log_fn(f"   Respuesta: {preview}")
+                            hdr_offset = r.headers.get("offset") or r.headers.get("Offset") or r.headers.get("x-entity-offset")
+                            if hdr_offset:
+                                log_fn(f"   Offset header: {hdr_offset}")
+                        r.raise_for_status()
+                    next_offset = None
+                    try:
+                        data = r.json()
+                        if isinstance(data, dict) and data.get("offset") is not None:
+                            next_offset = int(data.get("offset"))
+                    except Exception:
+                        pass
+                    hdr_offset = r.headers.get("offset") or r.headers.get("Offset") or r.headers.get("x-entity-offset")
+                    if hdr_offset is not None:
+                        try:
+                            next_offset = int(hdr_offset)
+                        except Exception:
+                            pass
+                    if next_offset is None:
+                        sent += len(chunk)
+                    else:
+                        sent = next_offset
+                    if log_fn:
+                        log_fn(f"↑ IG: {sent}/{file_size} bytes")
+            return sent == file_size
         except Exception as e:
             self._log_error(e, "subiendo archivo IG (resumable)", log_fn)
             if hasattr(e, "response") and e.response is not None and log_fn:
@@ -237,3 +300,156 @@ class InstagramUploader:
             except Exception:
                 msg += f"\n   Raw: {e.response.text}"
         log_fn(msg)
+    def _validate_video_for_ig(self, file_path: str, log_fn=print) -> bool:
+        """
+        Valida requisitos basicos para Reels via API.
+        Devuelve False si hay un problema critico.
+        """
+        if not os.path.exists(file_path):
+            if log_fn:
+                log_fn(f"??? Archivo no encontrado: {file_path}")
+            return False
+
+        file_size = os.path.getsize(file_path)
+        max_bytes = 300 * 1024 * 1024  # 300 MB
+        if file_size > max_bytes:
+            if log_fn:
+                log_fn(f"??? Archivo supera 300 MB: {file_size / (1024 * 1024):.2f} MB")
+            return False
+
+        probe = self._ffprobe(file_path, log_fn=log_fn)
+        if not probe:
+            return False
+
+        format_info = probe.get("format", {})
+        streams = probe.get("streams", [])
+
+        video_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
+        audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
+
+        errors = []
+        warnings = []
+
+        if not video_stream:
+            errors.append("No se encontr?? stream de video.")
+        else:
+            vcodec = (video_stream.get("codec_name") or "").lower()
+            if vcodec not in ("h264", "hevc", "h265"):
+                errors.append(f"Codec de video no soportado: {vcodec}")
+
+            width = video_stream.get("width")
+            height = video_stream.get("height")
+            if not width or not height:
+                warnings.append("No se pudo leer resoluci??n de video.")
+
+            fps = self._get_fps(video_stream)
+            if fps is None:
+                warnings.append("No se pudo leer fps del video.")
+            else:
+                if fps < 23 or fps > 60:
+                    warnings.append(f"FPS fuera de rango recomendado (23-60): {fps:.2f}")
+
+        if not audio_stream:
+            warnings.append("No se encontr?? stream de audio.")
+        else:
+            acodec = (audio_stream.get("codec_name") or "").lower()
+            if acodec != "aac":
+                warnings.append(f"Codec de audio no recomendado: {acodec} (recomendado: aac)")
+
+        duration = None
+        if format_info.get("duration"):
+            try:
+                duration = float(format_info.get("duration"))
+            except Exception:
+                duration = None
+
+        if duration is None:
+            warnings.append("No se pudo leer duraci??n del video.")
+        else:
+            if duration < 3 or duration > 900:
+                errors.append(f"Duraci??n fuera de rango (3s-15min): {duration:.2f}s")
+
+        if log_fn:
+            if errors:
+                log_fn("??? Validaci??n IG: errores:")
+                for e in errors:
+                    log_fn(f"   - {e}")
+            if warnings:
+                log_fn("?????? Validaci??n IG: advertencias:")
+                for w in warnings:
+                    log_fn(f"   - {w}")
+
+        return len(errors) == 0
+
+    def _reencode_for_ig(self, file_path: str, log_fn=print) -> str | None:
+        """
+        Re-encoda a H.264/AAC con faststart para compatibilidad con IG.
+        Devuelve la ruta del archivo nuevo o None si falla.
+        """
+        try:
+            src = Path(file_path)
+            if not src.exists():
+                if log_fn:
+                    log_fn(f"? Archivo no encontrado: {file_path}")
+                return None
+            out_path = src.with_name(src.stem + "_ig.mp4")
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i", str(src),
+                "-c:v", "libx264",
+                "-profile:v", "high",
+                "-level", "4.1",
+                "-pix_fmt", "yuv420p",
+                "-r", "30",
+                "-movflags", "+faststart",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-ar", "48000",
+                str(out_path),
+            ]
+            if log_fn:
+                log_fn("??? Re-encode IG: iniciando ffmpeg...")
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if result.returncode != 0:
+                if log_fn:
+                    log_fn("? Re-encode IG fall?")
+                    if result.stderr:
+                        log_fn(result.stderr.strip()[:800])
+                return None
+            if log_fn:
+                log_fn(f"? Re-encode IG listo: {out_path}")
+            return str(out_path)
+        except Exception as e:
+            if log_fn:
+                log_fn(f"? Error re-encode IG: {e}")
+            return None
+
+    def _ffprobe(self, file_path: str, log_fn=print):
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            file_path,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+            return json.loads(result.stdout)
+        except Exception as e:
+            if log_fn:
+                log_fn(f"??? No se pudo ejecutar ffprobe: {e}")
+                if hasattr(e, "stderr") and e.stderr:
+                    log_fn(f"   stderr: {e.stderr[:500]}")
+            return None
+
+    def _get_fps(self, video_stream: dict):
+        fps_raw = video_stream.get("avg_frame_rate") or video_stream.get("r_frame_rate")
+        if not fps_raw or fps_raw == "0/0":
+            return None
+        try:
+            return float(Fraction(fps_raw))
+        except Exception:
+            return None
+

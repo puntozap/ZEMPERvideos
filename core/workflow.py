@@ -23,6 +23,7 @@ from core.utils import (
     generar_visualizador_audio,
     overlay_visualizador,
     overlay_image_temporizada,
+    aplicar_musica_fondo,
 )
 from core.transcriber import transcribir_srt
 import re
@@ -41,10 +42,20 @@ def procesar_video(
     vertical_orden: str = "LR",
     recorte_top: float = 0.12,
     recorte_bottom: float = 0.12,
+    recorte_bordes: bool = False,
+    recorte_manual_top: float = 0.0,
+    recorte_manual_bottom: float = 0.0,
     generar_srt: bool = True,
     fondo_path: str | None = None,
     fondo_estilo: str = "fill",
     fondo_escala: float = 0.92,
+    fondo_usar_tamano_imagen: bool = False,
+    fondo_inset_pct: tuple[float, float, float, float] | None = None,
+    fondo_zoom: float = 1.0,
+    fondo_cintas: list[dict] | None = None,
+    fondo_mensajes: list[dict] | None = None,
+    fondo_bg_crop_top: float = 0.0,
+    fondo_bg_crop_bottom: float = 0.0,
     solo_video: bool = False,
     barra=None,
     logs=None,
@@ -61,6 +72,11 @@ def procesar_video(
     overlay_image: str | None = None,
     overlay_start: float = 0.0,
     overlay_duration: float = 2.0,
+    musica_path: str | None = None,
+    musica_volumen: float = 0.25,
+    musica_inicio: float = 0.0,
+    musica_fin: float | None = None,
+    musica_inicio_video: float = 0.0,
 ):
     """
     Procesa un archivo (video o audio):
@@ -143,6 +159,10 @@ def procesar_video(
                     out_dir=cortes_dir,
                     start_sec=start_sec,
                     end_sec=end_sec,
+                    crop_bars=recorte_bordes,
+                    crop_top=recorte_manual_top,
+                    crop_bottom=recorte_manual_bottom,
+                    crop_scale_back=(recorte_manual_top == 0 and recorte_manual_bottom == 0),
                     log_fn=logs if logs else None,
                 )
                 if logs: logs(f"Video dividido en {len(partes_video)} fragmentos")
@@ -151,6 +171,13 @@ def procesar_video(
             if fondo_path and os.path.exists(fondo_path) and partes_video:
                 fondo_dir = os.path.join(os.path.dirname(partes_video[0]), "background")
                 os.makedirs(fondo_dir, exist_ok=True)
+                fondo_target = None
+                if fondo_usar_tamano_imagen:
+                    try:
+                        fondo_target = obtener_tamano_video(fondo_path)
+                    except Exception:
+                        fondo_target = None
+                inset = fondo_inset_pct
                 for parte in partes_video:
                     if stop_control.should_stop():
                         if logs: logs("Proceso detenido por el usuario.")
@@ -162,7 +189,14 @@ def procesar_video(
                         out_path,
                         fondo_path,
                         estilo=fondo_estilo,
+                        target_size=fondo_target,
                         fg_scale=fondo_escala,
+                        inset_pct=inset,
+                        fg_zoom=fondo_zoom,
+                        cintas=fondo_cintas,
+                        mensajes=fondo_mensajes,
+                        bg_crop_top=fondo_bg_crop_top,
+                        bg_crop_bottom=fondo_bg_crop_bottom,
                         log_fn=logs if logs else None
                     )
 
@@ -195,6 +229,13 @@ def procesar_video(
                 if fondo_path and os.path.exists(fondo_path):
                     vertical_bg_dir = os.path.join(os.path.dirname(partes_video[0]), "background")
                     os.makedirs(vertical_bg_dir, exist_ok=True)
+                    fondo_target = None
+                    if fondo_usar_tamano_imagen:
+                        try:
+                            fondo_target = obtener_tamano_video(fondo_path)
+                        except Exception:
+                            fondo_target = None
+                    inset = fondo_inset_pct
                     for parte in partes_video:
                         if stop_control.should_stop():
                             if logs: logs("Proceso detenido por el usuario.")
@@ -209,8 +250,14 @@ def procesar_video(
                             out_path,
                             fondo_path,
                             estilo=fondo_estilo,
-                            target_size=(1080, 1920),
+                            target_size=fondo_target or (1080, 1920),
                             fg_scale=fondo_escala,
+                            inset_pct=inset,
+                            fg_zoom=fondo_zoom,
+                            cintas=fondo_cintas,
+                            mensajes=fondo_mensajes,
+                            bg_crop_top=fondo_bg_crop_top,
+                            bg_crop_bottom=fondo_bg_crop_bottom,
                             log_fn=logs if logs else None
                         )
 
@@ -319,6 +366,33 @@ def procesar_video(
                 visualizado.extend(original_outputs[len(visualizado):])
             output_videos = visualizado
 
+        if musica_path and os.path.exists(musica_path) and output_videos:
+            if logs:
+                logs("🎵 Aplicando música de fondo...")
+            mezclados = []
+            for idx, video_seg in enumerate(output_videos, start=1):
+                if stop_control.should_stop():
+                    if logs: logs("Proceso detenido por el usuario.")
+                    return
+                try:
+                    if logs:
+                        logs(f"Mezclando música en parte {idx}/{len(output_videos)}...")
+                    aplicar_musica_fondo(
+                        video_seg,
+                        musica_path,
+                        volumen=musica_volumen,
+                        music_start=musica_inicio,
+                        music_end=musica_fin,
+                        video_start=musica_inicio_video,
+                        log_fn=logs,
+                    )
+                    mezclados.append(video_seg)
+                except Exception as exc:
+                    if logs:
+                        logs(f"Advertencia: música no aplicada en parte {idx} ({exc})")
+                    mezclados.append(video_seg)
+            output_videos = mezclados
+
         return {
             "videos": output_videos,
             "base_dir": base_dir,
@@ -350,6 +424,11 @@ def procesar_corte_individual(
     outro_seconds: float = 3.0,
     outro_font_size: int = 54,
     outro_color: str = "#FFFFFF",
+    musica_path: str | None = None,
+    musica_volumen: float = 0.25,
+    musica_inicio: float = 0.0,
+    musica_fin: float | None = None,
+    musica_inicio_video: float = 0.0,
     barra=None,
     logs=None,
 ):
@@ -393,6 +472,32 @@ def procesar_corte_individual(
         )
         if logs: logs(f"Corte individual generado: {len(partes)} partes")
         output_videos = partes
+        if musica_path and os.path.exists(musica_path) and output_videos:
+            if logs:
+                logs("🎵 Aplicando música de fondo...")
+            mezclados = []
+            for idx, video_seg in enumerate(output_videos, start=1):
+                if stop_control.should_stop():
+                    if logs: logs("Proceso detenido por el usuario.")
+                    return
+                try:
+                    if logs:
+                        logs(f"Mezclando música en parte {idx}/{len(output_videos)}...")
+                    aplicar_musica_fondo(
+                        video_seg,
+                        musica_path,
+                        volumen=musica_volumen,
+                        music_start=musica_inicio,
+                        music_end=musica_fin,
+                        video_start=musica_inicio_video,
+                        log_fn=logs,
+                    )
+                    mezclados.append(video_seg)
+                except Exception as exc:
+                    if logs:
+                        logs(f"Advertencia: música no aplicada en parte {idx} ({exc})")
+                    mezclados.append(video_seg)
+            output_videos = mezclados
         return {
             "videos": output_videos,
             "base_dir": base_dir,
@@ -740,29 +845,15 @@ def procesar_quemar_srt(
     """
     try:
         if logs: logs("Iniciando quemado de SRT...")
-        try:
-            from core.utils import obtener_duracion_segundos
-            dur = obtener_duracion_segundos(video_path)
-            if logs: logs(f"Duracion video: {dur:.2f}s")
-        except Exception:
-            dur = None
-
-        try:
-            with open(srt_path, "r", encoding="utf-8", errors="ignore") as f:
-                data = f.read()
-            m = re.search(r"(\d+:\d+:\d+,\d+)\s*-->\s*(\d+:\d+:\d+,\d+)", data)
-            if m and logs:
-                logs(f"Primer tiempo SRT: {m.group(1)} -> {m.group(2)}")
-        except Exception:
-            pass
+        base_name = nombre_base_principal(video_path)
         out_dir = output_subtitulados_dir(video_path)
         os.makedirs(out_dir, exist_ok=True)
-        file_base = os.path.splitext(os.path.basename(video_path))[0]
-        out_path = os.path.join(out_dir, f"{file_base}_subt.mp4")
+        output_path = os.path.join(out_dir, f"{base_name}_subtitulado.mp4")
+
         quemar_srt_en_video(
             video_path,
             srt_path,
-            out_path,
+            output_path,
             posicion=posicion,
             font_size=font_size,
             outline=outline,
@@ -773,11 +864,8 @@ def procesar_quemar_srt(
             use_ass=use_ass,
             log_fn=logs
         )
-        if logs: logs(f"Video subtitulado listo: {out_path}")
+        if logs: logs(f"Video subtitulado listo: {output_path}")
+        return output_path
     except Exception as e:
-        if logs: logs(f"Error: {e}")
+        if logs: logs(f"Error quemando SRT: {e}")
         raise e
-
-
-
-

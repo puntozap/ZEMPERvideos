@@ -230,8 +230,14 @@ def create_tab(parent, context):
     ctk.CTkLabel(doc_row, text="Compartir:", text_color="#9aa4b2").grid(row=0, column=0, sticky="w")
     share_entry = ctk.CTkEntry(doc_row, textvariable=share_var, placeholder_text="emails separados por coma")
     share_entry.grid(row=0, column=1, sticky="ew", padx=(8, 8))
+    include_subs_var = tk.BooleanVar(value=False)
+    ctk.CTkCheckBox(
+        doc_row,
+        text="Incluir subtitulos",
+        variable=include_subs_var,
+    ).grid(row=0, column=2, sticky="e", padx=(0, 8))
     btn_doc = ctk.CTkButton(doc_row, text="Crear Google Doc", width=160)
-    btn_doc.grid(row=0, column=2, sticky="e")
+    btn_doc.grid(row=0, column=3, sticky="e")
 
     decision_box = ctk.CTkTextbox(details, height=120, corner_radius=8)
     decision_box.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 10))
@@ -572,22 +578,23 @@ def create_tab(parent, context):
             content = _build_doc_text()
 
             # Append subtitles transcription per minute (can take time).
-            link = link_var.get().strip()
-            if link:
-                log("Generando subtitulos (por minuto) para el Google Doc...")
-                try:
-                    subs = generar_subtitulos_por_minuto_desde_youtube(
-                        link,
-                        segundos_por_parte=60,
-                        idioma="es",
-                        model_size="base",
-                        log_fn=log,
-                    )
-                except Exception as exc:
-                    log(f"No se pudieron generar subtitulos: {exc}")
-                    subs = ""
-                if subs:
-                    content = content.rstrip() + "\n\n" + subs
+            if include_subs_var.get():
+                link = link_var.get().strip()
+                if link:
+                    log("Generando subtitulos (por minuto) para el Google Doc...")
+                    try:
+                        subs = generar_subtitulos_por_minuto_desde_youtube(
+                            link,
+                            segundos_por_parte=60,
+                            idioma="es",
+                            model_size="base",
+                            log_fn=log,
+                        )
+                    except Exception as exc:
+                        log(f"No se pudieron generar subtitulos: {exc}")
+                        subs = ""
+                    if subs:
+                        content = content.rstrip() + "\n\n" + subs
 
             _file_id, url = create_google_doc_from_text(
                 title=doc_title,

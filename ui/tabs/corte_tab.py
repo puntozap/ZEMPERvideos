@@ -4,6 +4,7 @@ import customtkinter as ctk
 import tkinter as tk
 
 from core.ai_youtube import subir_video_youtube_desde_ia
+from core.corte_config import get_corte_defaults, get_cintas_defaults, get_mensajes_defaults
 from core.utils import obtener_duracion_segundos, output_base_dir
 from core.workflow import procesar_srt, procesar_quemar_srt
 from ui.shared.preview import SimpleVideoPlayer
@@ -14,6 +15,8 @@ def create_tab(parent, context):
     estado = context["estado"]
     rango = context["rango"]
     log = context["log"]
+    titulo_seccion = context.get("titulo_seccion", "Corte")
+    modo_sin_bordes = bool(context.get("modo_sin_bordes", False))
     limpiar_entry = context["limpiar_entry"]
     alerta_busy = context["alerta_busy"]
     abrir_videos = context["abrir_videos"]
@@ -60,6 +63,10 @@ def create_tab(parent, context):
     def obtener_posicion_visualizador():
         return normalizar_posicion_visualizador(posicion_visualizador_var.get())
 
+    defaults = get_corte_defaults()
+    cintas_defaults = get_cintas_defaults()
+    mensajes_defaults = get_mensajes_defaults()
+
     def iniciar_proceso():
         if not estado["path"]:
             log("Selecciona un video primero.")
@@ -69,7 +76,7 @@ def create_tab(parent, context):
             return
         stop_control.clear_stop()
         stop_control.set_busy(True)
-        log_seccion("Corte")
+        log_seccion(titulo_seccion)
         minutos = leer_minutos()
         inicio_min, fin_min = leer_rango_minutos()
         vertical = vertical_var.get()
@@ -80,12 +87,121 @@ def create_tab(parent, context):
             recorte_total = 0.12
         recorte_top = recorte_total
         recorte_bottom = recorte_total
+        recorte_bordes = recorte_bordes_var.get()
+        if modo_sin_bordes:
+            vertical = False
+            recorte_bordes = True
+        try:
+            recorte_manual_top = float(entry_recorte_top.get().strip().replace(",", "."))
+        except Exception:
+            recorte_manual_top = float(defaults.get("recorte_manual_top", 0.0))
+        try:
+            recorte_manual_bottom = float(entry_recorte_bottom.get().strip().replace(",", "."))
+        except Exception:
+            recorte_manual_bottom = float(defaults.get("recorte_manual_bottom", 0.0))
         fondo_path = estado["fondo_path"] if fondo_var.get() else None
         fondo_estilo = fondo_estilo_var.get().lower()
         try:
             fondo_escala = float(entry_fondo_escala.get().strip().replace(",", "."))
         except Exception:
             fondo_escala = 0.92
+        fondo_usar_tamano_imagen = bool(modo_sin_bordes)
+        if modo_sin_bordes:
+            try:
+                inset_left = float(entry_left.get().strip().replace(",", ".")) / 100.0
+                inset_right = float(entry_right.get().strip().replace(",", ".")) / 100.0
+                inset_top = float(entry_top.get().strip().replace(",", ".")) / 100.0
+                inset_bottom = float(entry_bottom.get().strip().replace(",", ".")) / 100.0
+                fondo_inset_pct = (inset_left, inset_right, inset_top, inset_bottom)
+                fondo_zoom = float(entry_zoom.get().strip().replace(",", "."))
+            except Exception:
+                fondo_inset_pct = (
+                    float(defaults.get("inset_left_pct", 4.0)) / 100.0,
+                    float(defaults.get("inset_right_pct", 4.0)) / 100.0,
+                    float(defaults.get("inset_top_pct", 8.0)) / 100.0,
+                    float(defaults.get("inset_bottom_pct", 8.0)) / 100.0,
+                )
+                fondo_zoom = float(defaults.get("zoom", 1.0))
+        else:
+            fondo_inset_pct = None
+            fondo_zoom = 1.0
+        if modo_sin_bordes and cintas_enabled_var.get():
+            fondo_cintas = [
+                {
+                    "left_pct": float(entry_cinta_left_1.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_cinta_top_1.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_cinta_width_1.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_cinta_height_1.get().strip().replace(",", ".")),
+                    "bg_color": entry_cinta_bg_1.get().strip(),
+                    "border_color": entry_cinta_border_1.get().strip(),
+                    "text_color": entry_cinta_text_1.get().strip(),
+                    "fontfile_name": _cinta_text(0, "fontfile_name", ""),
+                    "fontfile_role": _cinta_text(0, "fontfile_role", ""),
+                    "nombre": entry_cinta_nombre_1.get().strip(),
+                    "rol": entry_cinta_rol_1.get().strip(),
+                },
+                {
+                    "left_pct": float(entry_cinta_left_2.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_cinta_top_2.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_cinta_width_2.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_cinta_height_2.get().strip().replace(",", ".")),
+                    "bg_color": entry_cinta_bg_2.get().strip(),
+                    "border_color": entry_cinta_border_2.get().strip(),
+                    "text_color": entry_cinta_text_2.get().strip(),
+                    "fontfile_name": _cinta_text(1, "fontfile_name", ""),
+                    "fontfile_role": _cinta_text(1, "fontfile_role", ""),
+                    "nombre": entry_cinta_nombre_2.get().strip(),
+                    "rol": entry_cinta_rol_2.get().strip(),
+                },
+            ]
+        else:
+            fondo_cintas = None
+        if modo_sin_bordes and mensajes_enabled_var.get():
+            fondo_mensajes = [
+                {
+                    "left_pct": float(entry_msg_left.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_msg_top.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_msg_width.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_msg_height.get().strip().replace(",", ".")),
+                    "bg_color": entry_msg_bg.get().strip(),
+                    "text_color": entry_msg_text.get().strip(),
+                    "border_color": entry_msg_border.get().strip(),
+                    "text": entry_msg_textval.get().strip(),
+                    "fontfile": msg_fontfile,
+                }
+            ]
+        else:
+            fondo_mensajes = None
+        if modo_sin_bordes:
+            try:
+                fondo_bg_crop_top = float(entry_bg_crop_top.get().strip().replace(",", ".")) / 100.0
+                fondo_bg_crop_bottom = float(entry_bg_crop_bottom.get().strip().replace(",", ".")) / 100.0
+            except Exception:
+                fondo_bg_crop_top = float(defaults.get("bg_crop_top_pct", 0.0)) / 100.0
+                fondo_bg_crop_bottom = float(defaults.get("bg_crop_bottom_pct", 20.0)) / 100.0
+        else:
+            fondo_bg_crop_top = 0.0
+            fondo_bg_crop_bottom = 0.0
+        musica_habilitada = bool(estado.get("musica_fondo_habilitada", False))
+        musica_path = estado.get("musica_fondo_path") if musica_habilitada else None
+        try:
+            musica_vol = float(estado.get("musica_fondo_volumen", 0.25))
+        except Exception:
+            musica_vol = 0.25
+        try:
+            musica_inicio = float(estado.get("musica_fondo_inicio", 0.0))
+        except Exception:
+            musica_inicio = 0.0
+        musica_fin = estado.get("musica_fondo_fin", None)
+        try:
+            if musica_fin is not None:
+                musica_fin = float(musica_fin)
+        except Exception:
+            musica_fin = None
+        try:
+            musica_inicio_video = float(estado.get("musica_fondo_inicio_video", 0.0))
+        except Exception:
+            musica_inicio_video = 0.0
 
         def run_corte():
             try:
@@ -107,10 +223,20 @@ def create_tab(parent, context):
                     orden,
                     recorte_top,
                     recorte_bottom,
+                    recorte_bordes,
+                    recorte_manual_top,
+                    recorte_manual_bottom,
                     False,
                     fondo_path,
                     fondo_estilo,
                     fondo_escala,
+                    fondo_usar_tamano_imagen,
+                    fondo_inset_pct,
+                    fondo_zoom,
+                    fondo_cintas,
+                    fondo_mensajes,
+                    fondo_bg_crop_top,
+                    fondo_bg_crop_bottom,
                     solo_video=solo_video_flag,
                     visualizador=visualizador_var.get(),
                     posicion_visualizador=obtener_posicion_visualizador(),
@@ -122,6 +248,11 @@ def create_tab(parent, context):
                     visualizador_saturacion=estado.get("visualizador_saturacion", 1.0),
                     visualizador_temperatura=estado.get("visualizador_temperatura", 0.0),
                     modo_visualizador=estado.get("visualizador_blend_mode", "lighten"),
+                    musica_path=musica_path,
+                    musica_volumen=musica_vol,
+                    musica_inicio=musica_inicio,
+                    musica_fin=musica_fin,
+                    musica_inicio_video=musica_inicio_video,
                 )
                 if procesar_todo_var.get():
                     videos = []
@@ -183,12 +314,123 @@ def create_tab(parent, context):
             recorte_total = 0.12
         recorte_top = recorte_total
         recorte_bottom = recorte_total
+        recorte_bordes = recorte_bordes_var.get()
+        if modo_sin_bordes:
+            recorte_bordes = True
+        try:
+            recorte_manual_top = float(entry_recorte_top.get().strip().replace(",", "."))
+        except Exception:
+            recorte_manual_top = float(defaults.get("recorte_manual_top", 0.0))
+        try:
+            recorte_manual_bottom = float(entry_recorte_bottom.get().strip().replace(",", "."))
+        except Exception:
+            recorte_manual_bottom = float(defaults.get("recorte_manual_bottom", 0.0))
         fondo_path = estado["fondo_path"] if fondo_var.get() else None
         fondo_estilo = fondo_estilo_var.get().lower()
         try:
             fondo_escala = float(entry_fondo_escala.get().strip().replace(",", "."))
         except Exception:
             fondo_escala = 0.92
+        fondo_usar_tamano_imagen = bool(modo_sin_bordes)
+        if modo_sin_bordes:
+            try:
+                inset_left = float(entry_left.get().strip().replace(",", ".")) / 100.0
+                inset_right = float(entry_right.get().strip().replace(",", ".")) / 100.0
+                inset_top = float(entry_top.get().strip().replace(",", ".")) / 100.0
+                inset_bottom = float(entry_bottom.get().strip().replace(",", ".")) / 100.0
+                fondo_inset_pct = (inset_left, inset_right, inset_top, inset_bottom)
+                fondo_zoom = float(entry_zoom.get().strip().replace(",", "."))
+            except Exception:
+                fondo_inset_pct = (
+                    float(defaults.get("inset_left_pct", 4.0)) / 100.0,
+                    float(defaults.get("inset_right_pct", 4.0)) / 100.0,
+                    float(defaults.get("inset_top_pct", 8.0)) / 100.0,
+                    float(defaults.get("inset_bottom_pct", 8.0)) / 100.0,
+                )
+                fondo_zoom = float(defaults.get("zoom", 1.0))
+        else:
+            fondo_inset_pct = None
+            fondo_zoom = 1.0
+        if modo_sin_bordes and cintas_enabled_var.get():
+            fondo_cintas = [
+                {
+                    "left_pct": float(entry_cinta_left_1.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_cinta_top_1.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_cinta_width_1.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_cinta_height_1.get().strip().replace(",", ".")),
+                    "bg_color": entry_cinta_bg_1.get().strip(),
+                    "border_color": entry_cinta_border_1.get().strip(),
+                    "text_color": entry_cinta_text_1.get().strip(),
+                    "fontfile_name": _cinta_text(0, "fontfile_name", ""),
+                    "fontfile_role": _cinta_text(0, "fontfile_role", ""),
+                    "nombre": entry_cinta_nombre_1.get().strip(),
+                    "rol": entry_cinta_rol_1.get().strip(),
+                },
+                {
+                    "left_pct": float(entry_cinta_left_2.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_cinta_top_2.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_cinta_width_2.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_cinta_height_2.get().strip().replace(",", ".")),
+                    "bg_color": entry_cinta_bg_2.get().strip(),
+                    "border_color": entry_cinta_border_2.get().strip(),
+                    "text_color": entry_cinta_text_2.get().strip(),
+                    "fontfile_name": _cinta_text(1, "fontfile_name", ""),
+                    "fontfile_role": _cinta_text(1, "fontfile_role", ""),
+                    "nombre": entry_cinta_nombre_2.get().strip(),
+                    "rol": entry_cinta_rol_2.get().strip(),
+                },
+            ]
+        else:
+            fondo_cintas = None
+        if modo_sin_bordes and mensajes_enabled_var.get():
+            fondo_mensajes = [
+                {
+                    "left_pct": float(entry_msg_left.get().strip().replace(",", ".")),
+                    "top_pct": float(entry_msg_top.get().strip().replace(",", ".")),
+                    "width_pct": float(entry_msg_width.get().strip().replace(",", ".")),
+                    "height_pct": float(entry_msg_height.get().strip().replace(",", ".")),
+                    "bg_color": entry_msg_bg.get().strip(),
+                    "text_color": entry_msg_text.get().strip(),
+                    "border_color": entry_msg_border.get().strip(),
+                    "text": entry_msg_textval.get().strip(),
+                    "fontfile": msg_fontfile,
+                }
+            ]
+        else:
+            fondo_mensajes = None
+        if modo_sin_bordes:
+            try:
+                fondo_bg_crop_top = float(entry_bg_crop_top.get().strip().replace(",", ".")) / 100.0
+                fondo_bg_crop_bottom = float(entry_bg_crop_bottom.get().strip().replace(",", ".")) / 100.0
+            except Exception:
+                fondo_bg_crop_top = float(defaults.get("bg_crop_top_pct", 0.0)) / 100.0
+                fondo_bg_crop_bottom = float(defaults.get("bg_crop_bottom_pct", 20.0)) / 100.0
+        else:
+            fondo_bg_crop_top = 0.0
+            fondo_bg_crop_bottom = 0.0
+        musica_habilitada = bool(estado.get("musica_fondo_habilitada", False))
+        musica_path = estado.get("musica_fondo_path") if musica_habilitada else None
+        try:
+            musica_vol = float(estado.get("musica_fondo_volumen", 0.25))
+        except Exception:
+            musica_vol = 0.25
+        try:
+            musica_inicio = float(estado.get("musica_fondo_inicio", 0.0))
+        except Exception:
+            musica_inicio = 0.0
+        musica_fin = estado.get("musica_fondo_fin", None)
+        try:
+            if musica_fin is not None:
+                musica_fin = float(musica_fin)
+        except Exception:
+            musica_fin = None
+        try:
+            musica_inicio_video = float(estado.get("musica_fondo_inicio_video", 0.0))
+        except Exception:
+            musica_inicio_video = 0.0
+        vertical = vertical_var.get()
+        if modo_sin_bordes:
+            vertical = False
 
         def run_auto():
             try:
@@ -208,14 +450,24 @@ def create_tab(parent, context):
                     inicio_min,
                     fin_min,
                     True,
-                    vertical_var.get(),
+                    vertical,
                     orden_var.get(),
                     recorte_top,
                     recorte_bottom,
+                    recorte_bordes,
+                    recorte_manual_top,
+                    recorte_manual_bottom,
                     False,
                     fondo_path,
                     fondo_estilo,
                     fondo_escala,
+                    fondo_usar_tamano_imagen,
+                    fondo_inset_pct,
+                    fondo_zoom,
+                    fondo_cintas,
+                    fondo_mensajes,
+                    fondo_bg_crop_top,
+                    fondo_bg_crop_bottom,
                     solo_video=solo_video_flag,
                     visualizador=visualizador_var.get(),
                     posicion_visualizador=obtener_posicion_visualizador(),
@@ -227,6 +479,11 @@ def create_tab(parent, context):
                     visualizador_saturacion=estado.get("visualizador_saturacion", 1.0),
                     visualizador_temperatura=estado.get("visualizador_temperatura", 0.0),
                     modo_visualizador=estado.get("visualizador_blend_mode", "lighten"),
+                    musica_path=musica_path,
+                    musica_volumen=musica_vol,
+                    musica_inicio=musica_inicio,
+                    musica_fin=musica_fin,
+                    musica_inicio_video=musica_inicio_video,
                 )
                 videos = []
                 if isinstance(result, dict):
@@ -302,6 +559,7 @@ def create_tab(parent, context):
         if seconds < 0 or seconds >= 60:
             raise ValueError("Segundos 00-59")
         return minutes * 60 + seconds
+
 
     def actualizar_etiquetas_rango():
         lbl_inicio_val.configure(text=format_time(rango["inicio"]))
@@ -412,6 +670,12 @@ def create_tab(parent, context):
         value="ALT",
     )
     rb_alt.grid(row=7, column=0, sticky="w", padx=14, pady=(0, 12))
+    if modo_sin_bordes:
+        chk_vertical.grid_remove()
+        lbl_orden.grid_remove()
+        rb_lr.grid_remove()
+        rb_rl.grid_remove()
+        rb_alt.grid_remove()
 
     visualizador_var = tk.BooleanVar(value=estado.get("visualizador", False))
     chk_visualizador = ctk.CTkCheckBox(
@@ -554,6 +818,8 @@ def create_tab(parent, context):
         command=lambda: limpiar_entry(entry_fondo_escala),
     )
     btn_clear_fondo.grid(row=0, column=2, sticky="e", padx=(8, 0))
+    if modo_sin_bordes:
+        pass
 
     row_recorte = ctk.CTkFrame(config, fg_color="transparent")
     row_recorte.grid(row=22, column=0, sticky="ew", padx=14, pady=(0, 10))
@@ -582,7 +848,332 @@ def create_tab(parent, context):
         text_color="#9aa4b2",
     )
     hint_recorte.grid(row=23, column=0, sticky="w", padx=14, pady=(0, 12))
+    if modo_sin_bordes:
+        row_recorte.grid_remove()
+        hint_recorte.grid_remove()
+        chk_visualizador.grid_remove()
+        lbl_pos_visual.grid_remove()
+        opt_pos_visual.grid_remove()
+        lbl_opacity.grid_remove()
+        lbl_opacity_value.grid_remove()
+        slider_opacity.grid_remove()
+        lbl_color.grid_remove()
+        entry_color.grid_remove()
+        lbl_margin.grid_remove()
+        lbl_margin_value.grid_remove()
+        slider_margin.grid_remove()
+    row_recorte_manual = ctk.CTkFrame(config, fg_color="transparent")
+    row_recorte_manual.grid(row=24, column=0, sticky="ew", padx=14, pady=(0, 10))
+    row_recorte_manual.grid_columnconfigure(1, weight=1)
+    row_recorte_manual.grid_columnconfigure(3, weight=1)
 
+    lbl_recorte_top = ctk.CTkLabel(row_recorte_manual, text="Recorte Top", font=ctk.CTkFont(size=12))
+    lbl_recorte_top.grid(row=0, column=0, sticky="w")
+    entry_recorte_top = ctk.CTkEntry(row_recorte_manual, width=70)
+    entry_recorte_top.insert(0, f"{defaults.get('recorte_manual_top', 0.08):.2f}")
+    entry_recorte_top.grid(row=0, column=1, sticky="w", padx=(6, 12))
+
+    lbl_recorte_bottom = ctk.CTkLabel(row_recorte_manual, text="Recorte Bottom", font=ctk.CTkFont(size=12))
+    lbl_recorte_bottom.grid(row=0, column=2, sticky="w")
+    entry_recorte_bottom = ctk.CTkEntry(row_recorte_manual, width=70)
+    entry_recorte_bottom.insert(0, f"{defaults.get('recorte_manual_bottom', 0.08):.2f}")
+    entry_recorte_bottom.grid(row=0, column=3, sticky="w", padx=(6, 0))
+
+    hint_recorte_manual = ctk.CTkLabel(
+        config,
+        text="Recorte manual en proporciÃ³n (0.05 - 0.25). Ej: 0.08",
+        font=ctk.CTkFont(size=12),
+        text_color="#9aa4b2",
+    )
+    hint_recorte_manual.grid(row=25, column=0, sticky="w", padx=14, pady=(0, 12))
+    if not modo_sin_bordes:
+        row_recorte_manual.grid_remove()
+        hint_recorte_manual.grid_remove()
+
+    row_inset = ctk.CTkFrame(config, fg_color="transparent")
+    row_inset.grid(row=26, column=0, sticky="ew", padx=14, pady=(0, 8))
+    row_inset.grid_columnconfigure(1, weight=1)
+
+    lbl_inset = ctk.CTkLabel(row_inset, text="Encuadre (porcentaje)", font=ctk.CTkFont(size=12))
+    lbl_inset.grid(row=0, column=0, sticky="w")
+
+    inset_frame = ctk.CTkFrame(config, fg_color="transparent")
+    inset_frame.grid(row=27, column=0, sticky="ew", padx=14, pady=(0, 10))
+    inset_frame.grid_columnconfigure(1, weight=1)
+    inset_frame.grid_columnconfigure(3, weight=1)
+
+    inset_left_var = tk.DoubleVar(value=float(defaults.get("inset_left_pct", 4.0)))
+    inset_right_var = tk.DoubleVar(value=float(defaults.get("inset_right_pct", 4.0)))
+    inset_top_var = tk.DoubleVar(value=float(defaults.get("inset_top_pct", 8.0)))
+    inset_bottom_var = tk.DoubleVar(value=float(defaults.get("inset_bottom_pct", 8.0)))
+    inset_zoom_var = tk.DoubleVar(value=float(defaults.get("zoom", 1.0)))
+
+    def _set_entry(entry, value, decimals=1):
+        entry.delete(0, "end")
+        entry.insert(0, f"{float(value):.{decimals}f}")
+
+    lbl_left = ctk.CTkLabel(inset_frame, text="Izq %", font=ctk.CTkFont(size=12))
+    lbl_left.grid(row=0, column=0, sticky="w")
+    entry_left = ctk.CTkEntry(inset_frame, width=60)
+    entry_left.insert(0, f"{float(defaults.get('inset_left_pct', 4.0)):.1f}")
+    entry_left.grid(row=0, column=1, sticky="w", padx=(6, 12))
+    slider_left = ctk.CTkSlider(
+        inset_frame, from_=0, to=20, number_of_steps=40,
+        variable=inset_left_var,
+        command=lambda v: _set_entry(entry_left, v),
+        width=140,
+    )
+    slider_left.grid(row=0, column=2, sticky="w", padx=(0, 10))
+
+    lbl_right = ctk.CTkLabel(inset_frame, text="Der %", font=ctk.CTkFont(size=12))
+    lbl_right.grid(row=0, column=3, sticky="w")
+    entry_right = ctk.CTkEntry(inset_frame, width=60)
+    entry_right.insert(0, f"{float(defaults.get('inset_right_pct', 4.0)):.1f}")
+    entry_right.grid(row=0, column=4, sticky="w", padx=(6, 12))
+    slider_right = ctk.CTkSlider(
+        inset_frame, from_=0, to=20, number_of_steps=40,
+        variable=inset_right_var,
+        command=lambda v: _set_entry(entry_right, v),
+        width=140,
+    )
+    slider_right.grid(row=0, column=5, sticky="w")
+
+    lbl_top = ctk.CTkLabel(inset_frame, text="Arriba %", font=ctk.CTkFont(size=12))
+    lbl_top.grid(row=1, column=0, sticky="w", pady=(8, 0))
+    entry_top = ctk.CTkEntry(inset_frame, width=60)
+    entry_top.insert(0, f"{float(defaults.get('inset_top_pct', 8.0)):.1f}")
+    entry_top.grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(8, 0))
+    slider_top = ctk.CTkSlider(
+        inset_frame, from_=0, to=30, number_of_steps=60,
+        variable=inset_top_var,
+        command=lambda v: _set_entry(entry_top, v),
+        width=140,
+    )
+    slider_top.grid(row=1, column=2, sticky="w", padx=(0, 10), pady=(8, 0))
+
+    lbl_bottom = ctk.CTkLabel(inset_frame, text="Abajo %", font=ctk.CTkFont(size=12))
+    lbl_bottom.grid(row=1, column=3, sticky="w", pady=(8, 0))
+    entry_bottom = ctk.CTkEntry(inset_frame, width=60)
+    entry_bottom.insert(0, f"{float(defaults.get('inset_bottom_pct', 8.0)):.1f}")
+    entry_bottom.grid(row=1, column=4, sticky="w", padx=(6, 12), pady=(8, 0))
+    slider_bottom = ctk.CTkSlider(
+        inset_frame, from_=0, to=30, number_of_steps=60,
+        variable=inset_bottom_var,
+        command=lambda v: _set_entry(entry_bottom, v),
+        width=140,
+    )
+    slider_bottom.grid(row=1, column=5, sticky="w", pady=(8, 0))
+
+    lbl_zoom = ctk.CTkLabel(inset_frame, text="Zoom", font=ctk.CTkFont(size=12))
+    lbl_zoom.grid(row=2, column=0, sticky="w", pady=(8, 0))
+    entry_zoom = ctk.CTkEntry(inset_frame, width=60)
+    entry_zoom.insert(0, f"{float(defaults.get('zoom', 1.0)):.2f}")
+    entry_zoom.grid(row=2, column=1, sticky="w", padx=(6, 12), pady=(8, 0))
+    slider_zoom = ctk.CTkSlider(
+        inset_frame, from_=0.8, to=1.3, number_of_steps=50,
+        variable=inset_zoom_var,
+        command=lambda v: _set_entry(entry_zoom, v, decimals=2),
+        width=140,
+    )
+    slider_zoom.grid(row=2, column=2, sticky="w", padx=(0, 10), pady=(8, 0))
+
+    if not modo_sin_bordes:
+        row_inset.grid_remove()
+        inset_frame.grid_remove()
+
+    cintas_card = ctk.CTkFrame(config, corner_radius=10)
+    cintas_card.grid(row=28, column=0, sticky="ew", padx=14, pady=(0, 10))
+    cintas_card.grid_columnconfigure(0, weight=1)
+
+    cintas_enabled_var = tk.BooleanVar(value=True)
+    chk_cintas = ctk.CTkCheckBox(
+        cintas_card,
+        text="Agregar cintas (nombre y rol)",
+        variable=cintas_enabled_var,
+    )
+    chk_cintas.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 6))
+
+    def _cinta_defaults(idx, key, fallback):
+        try:
+            return float(cintas_defaults[idx].get(key, fallback))
+        except Exception:
+            return fallback
+
+    def _cinta_text(idx, key, fallback):
+        try:
+            return str(cintas_defaults[idx].get(key, fallback))
+        except Exception:
+            return fallback
+
+    left_cfg = ctk.CTkFrame(cintas_card, fg_color="transparent")
+    left_cfg.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+    left_cfg.grid_columnconfigure(1, weight=1)
+    left_cfg.grid_columnconfigure(3, weight=1)
+
+    c1_title = ctk.CTkLabel(left_cfg, text="Cinta izquierda", font=ctk.CTkFont(size=12, weight="bold"))
+    c1_title.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+
+    entry_cinta_nombre_1 = ctk.CTkEntry(left_cfg, width=220)
+    entry_cinta_nombre_1.insert(0, _cinta_text(0, "nombre", "Invitado"))
+    entry_cinta_nombre_1.grid(row=1, column=0, columnspan=2, sticky="w", padx=(0, 12))
+    entry_cinta_rol_1 = ctk.CTkEntry(left_cfg, width=220)
+    entry_cinta_rol_1.insert(0, _cinta_text(0, "rol", "Rol / Profesión"))
+    entry_cinta_rol_1.grid(row=1, column=2, columnspan=2, sticky="w")
+
+    entry_cinta_bg_1 = ctk.CTkEntry(left_cfg, width=90)
+    entry_cinta_bg_1.insert(0, _cinta_text(0, "bg_color", "#000000"))
+    entry_cinta_bg_1.grid(row=2, column=0, sticky="w", pady=(6, 0))
+    entry_cinta_border_1 = ctk.CTkEntry(left_cfg, width=90)
+    entry_cinta_border_1.insert(0, _cinta_text(0, "border_color", "#FFC400"))
+    entry_cinta_border_1.grid(row=2, column=1, sticky="w", padx=(8, 12), pady=(6, 0))
+    entry_cinta_text_1 = ctk.CTkEntry(left_cfg, width=90)
+    entry_cinta_text_1.insert(0, _cinta_text(0, "text_color", "#FFFFFF"))
+    entry_cinta_text_1.grid(row=2, column=2, sticky="w", pady=(6, 0))
+
+    entry_cinta_left_1 = ctk.CTkEntry(left_cfg, width=70)
+    entry_cinta_left_1.insert(0, f"{_cinta_defaults(0, 'left_pct', 6.0):.1f}")
+    entry_cinta_left_1.grid(row=3, column=0, sticky="w", pady=(6, 0))
+    entry_cinta_top_1 = ctk.CTkEntry(left_cfg, width=70)
+    entry_cinta_top_1.insert(0, f"{_cinta_defaults(0, 'top_pct', 50.0):.1f}")
+    entry_cinta_top_1.grid(row=3, column=1, sticky="w", padx=(8, 12), pady=(6, 0))
+    entry_cinta_width_1 = ctk.CTkEntry(left_cfg, width=70)
+    entry_cinta_width_1.insert(0, f"{_cinta_defaults(0, 'width_pct', 42.0):.1f}")
+    entry_cinta_width_1.grid(row=3, column=2, sticky="w", pady=(6, 0))
+    entry_cinta_height_1 = ctk.CTkEntry(left_cfg, width=70)
+    entry_cinta_height_1.insert(0, f"{_cinta_defaults(0, 'height_pct', 10.0):.1f}")
+    entry_cinta_height_1.grid(row=3, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+
+    # positions moved below color fields
+
+    right_cfg = ctk.CTkFrame(cintas_card, fg_color="transparent")
+    right_cfg.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+    right_cfg.grid_columnconfigure(1, weight=1)
+    right_cfg.grid_columnconfigure(3, weight=1)
+
+    c2_title = ctk.CTkLabel(right_cfg, text="Cinta derecha", font=ctk.CTkFont(size=12, weight="bold"))
+    c2_title.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+
+    entry_cinta_nombre_2 = ctk.CTkEntry(right_cfg, width=220)
+    entry_cinta_nombre_2.insert(0, _cinta_text(1, "nombre", "Host"))
+    entry_cinta_nombre_2.grid(row=1, column=0, columnspan=2, sticky="w", padx=(0, 12))
+    entry_cinta_rol_2 = ctk.CTkEntry(right_cfg, width=220)
+    entry_cinta_rol_2.insert(0, _cinta_text(1, "rol", "Rol / Profesión"))
+    entry_cinta_rol_2.grid(row=1, column=2, columnspan=2, sticky="w")
+
+    entry_cinta_bg_2 = ctk.CTkEntry(right_cfg, width=90)
+    entry_cinta_bg_2.insert(0, _cinta_text(1, "bg_color", "#000000"))
+    entry_cinta_bg_2.grid(row=2, column=0, sticky="w", pady=(6, 0))
+    entry_cinta_border_2 = ctk.CTkEntry(right_cfg, width=90)
+    entry_cinta_border_2.insert(0, _cinta_text(1, "border_color", "#FFC400"))
+    entry_cinta_border_2.grid(row=2, column=1, sticky="w", padx=(8, 12), pady=(6, 0))
+    entry_cinta_text_2 = ctk.CTkEntry(right_cfg, width=90)
+    entry_cinta_text_2.insert(0, _cinta_text(1, "text_color", "#FFFFFF"))
+    entry_cinta_text_2.grid(row=2, column=2, sticky="w", pady=(6, 0))
+
+    entry_cinta_left_2 = ctk.CTkEntry(right_cfg, width=70)
+    entry_cinta_left_2.insert(0, f"{_cinta_defaults(1, 'left_pct', 48.0):.1f}")
+    entry_cinta_left_2.grid(row=3, column=0, sticky="w", pady=(6, 0))
+    entry_cinta_top_2 = ctk.CTkEntry(right_cfg, width=70)
+    entry_cinta_top_2.insert(0, f"{_cinta_defaults(1, 'top_pct', 52.0):.1f}")
+    entry_cinta_top_2.grid(row=3, column=1, sticky="w", padx=(8, 12), pady=(6, 0))
+    entry_cinta_width_2 = ctk.CTkEntry(right_cfg, width=70)
+    entry_cinta_width_2.insert(0, f"{_cinta_defaults(1, 'width_pct', 42.0):.1f}")
+    entry_cinta_width_2.grid(row=3, column=2, sticky="w", pady=(6, 0))
+    entry_cinta_height_2 = ctk.CTkEntry(right_cfg, width=70)
+    entry_cinta_height_2.insert(0, f"{_cinta_defaults(1, 'height_pct', 10.0):.1f}")
+    entry_cinta_height_2.grid(row=3, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+
+    # positions moved below color fields
+
+    if not modo_sin_bordes:
+        cintas_card.grid_remove()
+
+    msg_card = ctk.CTkFrame(config, corner_radius=10)
+    msg_card.grid(row=29, column=0, sticky="ew", padx=14, pady=(0, 10))
+    msg_card.grid_columnconfigure(0, weight=1)
+
+    mensajes_enabled_var = tk.BooleanVar(value=True)
+    chk_msg = ctk.CTkCheckBox(
+        msg_card,
+        text="Agregar mensaje superior",
+        variable=mensajes_enabled_var,
+    )
+    chk_msg.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 6))
+
+    def _msg_default(key, fallback):
+        try:
+            return mensajes_defaults[0].get(key, fallback)
+        except Exception:
+            return fallback
+
+    msg_fontfile = str(_msg_default("fontfile", "C:\\Windows\\Fonts\\arialbd.ttf"))
+
+    msg_row = ctk.CTkFrame(msg_card, fg_color="transparent")
+    msg_row.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+    msg_row.grid_columnconfigure(1, weight=1)
+    msg_row.grid_columnconfigure(3, weight=1)
+
+    entry_msg_textval = ctk.CTkEntry(msg_row, width=280)
+    entry_msg_textval.insert(0, str(_msg_default("text", "Suscríbete y comparte")))
+    entry_msg_textval.grid(row=0, column=0, columnspan=2, sticky="w", padx=(0, 12))
+
+    entry_msg_bg = ctk.CTkEntry(msg_row, width=90)
+    entry_msg_bg.insert(0, str(_msg_default("bg_color", "#D91E18")))
+    entry_msg_bg.grid(row=0, column=2, sticky="w")
+    entry_msg_text = ctk.CTkEntry(msg_row, width=90)
+    entry_msg_text.insert(0, str(_msg_default("text_color", "#FFFFFF")))
+    entry_msg_text.grid(row=0, column=3, sticky="w", padx=(8, 0))
+    entry_msg_border = ctk.CTkEntry(msg_row, width=90)
+    entry_msg_border.insert(0, str(_msg_default("border_color", "#FFC400")))
+    entry_msg_border.grid(row=0, column=4, sticky="w", padx=(8, 0))
+
+    entry_msg_left = ctk.CTkEntry(msg_row, width=70)
+    entry_msg_left.insert(0, f"{float(_msg_default('left_pct', 6.0)):.1f}")
+    entry_msg_left.grid(row=1, column=0, sticky="w", pady=(6, 0))
+    entry_msg_top = ctk.CTkEntry(msg_row, width=70)
+    entry_msg_top.insert(0, f"{float(_msg_default('top_pct', 6.0)):.1f}")
+    entry_msg_top.grid(row=1, column=1, sticky="w", padx=(8, 12), pady=(6, 0))
+    entry_msg_width = ctk.CTkEntry(msg_row, width=70)
+    entry_msg_width.insert(0, f"{float(_msg_default('width_pct', 48.0)):.1f}")
+    entry_msg_width.grid(row=1, column=2, sticky="w", pady=(6, 0))
+    entry_msg_height = ctk.CTkEntry(msg_row, width=70)
+    entry_msg_height.insert(0, f"{float(_msg_default('height_pct', 6.0)):.1f}")
+    entry_msg_height.grid(row=1, column=3, sticky="w", padx=(8, 0), pady=(6, 0))
+
+    if not modo_sin_bordes:
+        msg_card.grid_remove()
+
+    bg_crop_card = ctk.CTkFrame(config, corner_radius=10)
+    bg_crop_card.grid(row=30, column=0, sticky="ew", padx=14, pady=(0, 10))
+    bg_crop_card.grid_columnconfigure(1, weight=1)
+    lbl_bg_crop = ctk.CTkLabel(bg_crop_card, text="Recorte fondo (%)", font=ctk.CTkFont(size=12))
+    lbl_bg_crop.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
+
+    entry_bg_crop_top = ctk.CTkEntry(bg_crop_card, width=70)
+    entry_bg_crop_top.insert(0, f"{float(defaults.get('bg_crop_top_pct', 0.0)):.1f}")
+    entry_bg_crop_top.grid(row=1, column=0, sticky="w", padx=8, pady=(0, 8))
+    lbl_bg_top = ctk.CTkLabel(bg_crop_card, text="Top", font=ctk.CTkFont(size=11))
+    lbl_bg_top.grid(row=2, column=0, sticky="w", padx=8, pady=(0, 8))
+
+    entry_bg_crop_bottom = ctk.CTkEntry(bg_crop_card, width=70)
+    entry_bg_crop_bottom.insert(0, f"{float(defaults.get('bg_crop_bottom_pct', 20.0)):.1f}")
+    entry_bg_crop_bottom.grid(row=1, column=1, sticky="w", padx=8, pady=(0, 8))
+    lbl_bg_bottom = ctk.CTkLabel(bg_crop_card, text="Bottom", font=ctk.CTkFont(size=11))
+    lbl_bg_bottom.grid(row=2, column=1, sticky="w", padx=8, pady=(0, 8))
+
+    if not modo_sin_bordes:
+        bg_crop_card.grid_remove()
+
+    recorte_bordes_var = ctk.BooleanVar(value=modo_sin_bordes)
+    chk_recorte_bordes = ctk.CTkCheckBox(
+        config,
+        text="Recortar bordes negros (mantener formato original)",
+        variable=recorte_bordes_var,
+    )
+    chk_recorte_bordes.grid(row=31, column=0, sticky="w", padx=14, pady=(0, 12))
+    if modo_sin_bordes:
+        chk_recorte_bordes.configure(state="disabled")
+        chk_recorte_bordes.grid_remove()
     actions = ctk.CTkFrame(top, corner_radius=10)
     actions.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
     actions.grid_columnconfigure(0, weight=1)
@@ -663,6 +1254,10 @@ def create_tab(parent, context):
         variable=idioma_var,
     )
     opt_idioma.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0))
+    if modo_sin_bordes:
+        chk_procesar_todo.grid_remove()
+        srt_row.grid_remove()
+        auto_frame.grid_remove()
 
     def abrir_carpeta_base():
         base = output_base_dir(estado["path"]) if estado.get("path") else os.path.abspath("output")
